@@ -1,0 +1,28 @@
+# Render Blueprint — adjust names and repo; create Postgres in dashboard and link env vars if not using a paid plan with DB from YAML.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: resolviq-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      # After you create a Render PostgreSQL instance, add:
+      # SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+      # And set CORS_ORIGINS to your static site URL, e.g. https://resolviq-frontend.onrender.com
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: resolviq-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false

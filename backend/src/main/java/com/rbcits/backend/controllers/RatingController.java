@@ -7,7 +7,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/ratings")
-@CrossOrigin(origins = "http://localhost:5173")
 public class RatingController {
 
     private final RatingService ratingService;
