@@ -247,9 +247,9 @@ export function UserComplaintView() {
   const status = statusConfig[complaint.status] || statusConfig['open'];
 
   return (
-    <div className="flex flex-col bg-black" style={{ height: '100vh' }}>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
       {/* Header */}
-      <div className="border-b border-white/10 bg-black px-8 py-5 flex-shrink-0">
+      <div className="shrink-0 border-b border-white/10 bg-black px-4 py-4 sm:px-8 sm:py-5">
         <button
           onClick={() => navigate('/user/dashboard')}
           className="flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-4 transition-colors"
@@ -296,7 +296,7 @@ export function UserComplaintView() {
 
       {/* Rating Screen */}
       {showRating ? (
-        <div className="flex-1 flex items-center justify-center p-8 bg-black">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-black p-6 sm:p-8">
           <div className="max-w-md w-full text-center">
             <div className="w-16 h-16 bg-amber-50 border-2 border-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
               <Star className="w-8 h-8 text-amber-500" />
@@ -347,7 +347,7 @@ export function UserComplaintView() {
         </div>
       ) : (
         /* Chat Interface */
-        <div className="flex-1 min-h-0 flex flex-col" style={{ height: 'calc(100vh - 180px)' }}>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* Original description as system note */}
           <div className="px-6 pt-4 pb-2 flex-shrink-0">
             <div className="bg-white/10 backdrop-blur border border-white/20 rounded-xl p-4 text-sm text-white/60 leading-relaxed">

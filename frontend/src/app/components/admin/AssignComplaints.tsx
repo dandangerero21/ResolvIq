@@ -138,9 +138,9 @@ export function AssignComplaints() {
   const pendingAssignments = Object.keys(selections).filter(id => !assigned[id]);
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:h-full md:overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-white/10 bg-white/5 backdrop-blur px-8 py-6">
+      <div className="shrink-0 border-b border-white/10 bg-white/5 backdrop-blur px-4 py-5 sm:px-8 sm:py-6">
         <button
           onClick={() => navigate('/admin/dashboard')}
           className="flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-4 transition-colors cursor-target"
@@ -169,7 +169,7 @@ export function AssignComplaints() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-5 sm:px-8 sm:py-6 md:min-h-0 md:flex-1 md:overflow-y-auto">
         {/* Filter */}
         <div className="flex items-center gap-2 mb-6">
           <Filter className="w-3.5 h-3.5 text-white/40" />

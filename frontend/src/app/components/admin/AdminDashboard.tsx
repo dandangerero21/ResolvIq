@@ -100,9 +100,9 @@ export function AdminDashboard() {
   ];
 
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto md:h-full md:overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-white/10 bg-white/5 px-4 py-5 backdrop-blur sm:px-6 lg:px-8">
+      <div className="shrink-0 border-b border-white/10 bg-white/5 px-4 py-5 backdrop-blur sm:px-6 lg:px-8">
         <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <p className="mb-1 text-xs uppercase tracking-wider text-white/60">Admin Panel</p>
@@ -159,7 +159,7 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8">
+      <div className="min-w-0 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 md:min-h-0 md:flex-1 md:overflow-y-auto">
         {/* Bento: stats row + tall resolution + wide assignment (lg+) */}
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {statsCards.map(card => {

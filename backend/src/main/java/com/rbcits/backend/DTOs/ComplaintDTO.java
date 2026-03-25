@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.util.List;
-import java.util.Date;
+import java.time.Instant;
 
 @Getter
 @Setter
@@ -24,9 +24,9 @@ public class ComplaintDTO {
     private String customCategory;
     private Long assignedStaffId;
     private String assignedStaffName;
-    private Date createdAt;
-    private Date updatedAt;
-    private Date resolvedAt;
+    private Instant createdAt;
+    private Instant updatedAt;
+    private Instant resolvedAt;
     private Integer rating;
     private List<MessageDTO> messages;
     private AssignmentDTO assignment;

@@ -102,8 +102,8 @@ export function StaffDashboard() {
   const firstName = currentUser?.name?.split(/\s+/)[0] || 'there';
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex-shrink-0 border-b border-amber-500/15 bg-gradient-to-br from-slate-950/90 via-violet-950/25 to-amber-950/30 px-6 py-8 backdrop-blur sm:px-8">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:h-full md:overflow-hidden">
+      <div className="shrink-0 border-b border-amber-500/15 bg-gradient-to-br from-slate-950/90 via-violet-950/25 to-amber-950/30 px-4 py-6 backdrop-blur sm:px-8 sm:py-8">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:max-w-none">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 flex-1">
@@ -150,7 +150,7 @@ export function StaffDashboard() {
           </div>
 
           {/* Same five metrics + tab switching as before; layout tuned for staff workbench */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 lg:gap-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 lg:gap-3">
             {statsCards.map(card => {
               const Icon = card.icon;
               const isActive = activeTab === card.filterKey;
@@ -185,7 +185,7 @@ export function StaffDashboard() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8 sm:px-8">
+      <div className="px-4 py-6 sm:px-8 sm:py-8 md:min-h-0 md:flex-1 md:overflow-y-auto">
         <div className="mx-auto max-w-6xl space-y-6 lg:max-w-none">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-24">

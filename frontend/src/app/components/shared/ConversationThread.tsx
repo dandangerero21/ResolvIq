@@ -84,9 +84,9 @@ export function ConversationThread({
   });
 
   return (
-    <div className="flex flex-col h-full bg-black">
+    <div className="flex min-h-0 h-full flex-col bg-black">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-black">
+      <div className="min-h-0 flex-1 overflow-y-auto space-y-6 bg-black p-4 sm:p-6">
         {grouped.map(group => (
           <div key={group.date}>
             {/* Date Divider */}

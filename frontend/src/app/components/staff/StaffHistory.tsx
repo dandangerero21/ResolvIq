@@ -65,8 +65,8 @@ export function StaffHistory() {
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex-shrink-0 border-b border-amber-500/15 bg-gradient-to-br from-slate-950/90 via-violet-950/25 to-amber-950/30 px-6 py-8 backdrop-blur sm:px-8">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:h-full md:overflow-hidden">
+      <div className="shrink-0 border-b border-amber-500/15 bg-gradient-to-br from-slate-950/90 via-violet-950/25 to-amber-950/30 px-4 py-6 backdrop-blur sm:px-8 sm:py-8">
         <p className="mb-1.5 flex items-center gap-2 text-xs font-medium tracking-wide text-amber-200/75">
           <History className="h-3.5 w-3.5 text-amber-400/90" />
           Staff workspace
@@ -79,7 +79,7 @@ export function StaffHistory() {
         </p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8 sm:px-8">
+      <div className="px-4 py-6 sm:px-8 sm:py-8 md:min-h-0 md:flex-1 md:overflow-y-auto">
         <div className="mx-auto max-w-6xl lg:max-w-none">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-24">

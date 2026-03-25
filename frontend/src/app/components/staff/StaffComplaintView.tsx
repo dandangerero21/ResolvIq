@@ -173,9 +173,9 @@ export function StaffComplaintView() {
   const status = statusConfig[complaint.status];
 
   return (
-    <div className="flex flex-col h-screen bg-black" style={{ height: '100vh' }}>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
       {/* Header */}
-      <div className="border-b border-white/10 bg-black px-8 py-5 flex-shrink-0">
+      <div className="shrink-0 border-b border-white/10 bg-black px-4 py-4 sm:px-8 sm:py-5">
         <button
           onClick={() => navigate('/staff/dashboard')}
           className="flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-4 transition-colors"
@@ -202,7 +202,7 @@ export function StaffComplaintView() {
                 {complaint.priority}
               </span>
             </div>
-            <h2 className="text-black" style={{ fontWeight: 700 }}>{complaint.title}</h2>
+            <h2 className="text-white" style={{ fontWeight: 700 }}>{complaint.title}</h2>
           </div>
 
           {(complaint.status === 'Resolved' || complaint.status === 'resolved') && complaint.rating && (

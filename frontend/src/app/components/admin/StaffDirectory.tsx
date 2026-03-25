@@ -54,9 +54,9 @@ export function StaffDirectory() {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:h-full md:overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-white/10 bg-white/5 backdrop-blur px-8 py-6">
+      <div className="shrink-0 border-b border-white/10 bg-white/5 backdrop-blur px-4 py-5 sm:px-8 sm:py-6">
         <button
           onClick={() => navigate('/admin/dashboard')}
           className="flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-4 transition-colors cursor-target"
@@ -69,7 +69,7 @@ export function StaffDirectory() {
         <p className="text-white/60 text-sm mt-0.5">{staffMembers.length} staff members</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="px-4 py-5 sm:px-8 sm:py-6 md:min-h-0 md:flex-1 md:overflow-y-auto">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-16">
             <Loader className="w-6 h-6 text-white/60 animate-spin mb-3" />

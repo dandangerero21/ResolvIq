@@ -78,9 +78,9 @@ export function UserDashboard() {
   const firstName = currentUser?.name?.split(/\s+/)[0] || 'there';
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:h-full md:overflow-hidden">
       {/* Personal header — distinct from admin “panel” chrome */}
-      <div className="flex-shrink-0 border-b border-teal-500/10 bg-gradient-to-br from-slate-950/80 via-slate-950/40 to-teal-950/20 px-6 py-8 backdrop-blur sm:px-8">
+      <div className="shrink-0 border-b border-teal-500/10 bg-gradient-to-br from-slate-950/80 via-slate-950/40 to-teal-950/20 px-4 py-6 backdrop-blur sm:px-8 sm:py-8">
         <div className="mx-auto flex max-w-3xl flex-col gap-6 lg:max-w-none">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
@@ -156,7 +156,7 @@ export function UserDashboard() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8 sm:px-8">
+      <div className="px-4 py-6 sm:px-8 sm:py-8 md:min-h-0 md:flex-1 md:overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 lg:max-w-none">
           {inProgressComplaints.length > 0 && (
             <div className="flex items-start gap-3 rounded-2xl border border-teal-500/20 bg-teal-950/25 px-4 py-3.5 backdrop-blur">

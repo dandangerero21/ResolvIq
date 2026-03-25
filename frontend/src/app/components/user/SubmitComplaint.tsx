@@ -138,7 +138,7 @@ export function SubmitComplaint() {
 
   if (submitted) {
     return (
-      <div className="flex flex-1 min-h-0 flex-col items-center justify-center px-8 py-10">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8 sm:px-8 sm:py-10">
         <div className="max-w-md w-full text-center">
           <div className="w-16 h-16 bg-black rounded-2xl flex items-center justify-center mx-auto mb-5">
             <CheckCircle2 className="w-8 h-8 text-white" />
@@ -147,8 +147,9 @@ export function SubmitComplaint() {
           <p className="text-white/60 text-sm leading-relaxed mb-8">
             Your complaint has been received. Our admin team will review it and assign a specialist shortly. You'll be able to track it from your dashboard.
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
+              type="button"
               onClick={() => {
                 setSubmitted(false);
                 setStep(1);
@@ -163,8 +164,9 @@ export function SubmitComplaint() {
               Submit Another
             </button>
             <button
+              type="button"
               onClick={() => navigate('/user/dashboard')}
-              className="px-4 py-2.5 bg-black rounded-xl text-sm text-white hover:bg-red-600 transition-colors"
+              className="rounded-xl bg-black px-4 py-2.5 text-sm text-white transition-colors hover:bg-red-600"
               style={{ fontWeight: 600 }}
             >
               View Dashboard
@@ -176,45 +178,54 @@ export function SubmitComplaint() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:h-full md:overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-white/10 bg-white/5 backdrop-blur px-8 py-6">
+      <div className="shrink-0 border-b border-white/10 bg-white/5 backdrop-blur px-4 py-4 sm:px-8 sm:py-6">
         <button
-          onClick={() => step > 1 ? setStep(s => s - 1) : navigate('/user/dashboard')}
-          className="flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-4 transition-colors cursor-target"
+          type="button"
+          onClick={() => (step > 1 ? setStep(s => s - 1) : navigate('/user/dashboard'))}
+          className="mb-3 flex cursor-target items-center gap-1.5 text-sm text-white/60 transition-colors hover:text-white sm:mb-4"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="h-4 w-4" />
           {step > 1 ? 'Back' : 'Dashboard'}
         </button>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-white/60 uppercase tracking-wider mb-1">New Complaint</p>
-            <h1 className="text-white" style={{ fontWeight: 700 }}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <div className="min-w-0">
+            <p className="mb-1 text-xs uppercase tracking-wider text-white/60">New Complaint</p>
+            <h1 className="text-lg text-white sm:text-xl" style={{ fontWeight: 700 }}>
               {step === 1 ? 'Select Category' : step === 2 ? 'Set Priority & Details' : 'Review & Submit'}
             </h1>
           </div>
-          {/* Step indicators */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5 sm:justify-end sm:gap-2">
             {[1, 2, 3].map(s => (
-              <div key={s} className="flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs transition-all ${
-                  s < step ? 'bg-black text-white' : s === step ? 'bg-red-600 text-white' : 'bg-white/10 text-white/40'
-                }`} style={{ fontWeight: 600 }}>
+              <div key={s} className="flex items-center gap-1.5 sm:gap-2">
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs transition-all ${
+                    s < step
+                      ? 'bg-black text-white'
+                      : s === step
+                        ? 'bg-red-600 text-white'
+                        : 'bg-white/10 text-white/40'
+                  }`}
+                  style={{ fontWeight: 600 }}
+                >
                   {s < step ? '✓' : s}
                 </div>
-                {s < 3 && <div className={`w-6 h-0.5 ${s < step ? 'bg-black' : 'bg-white/10'}`} />}
+                {s < 3 && (
+                  <div className={`hidden h-0.5 w-4 sm:block sm:w-6 ${s < step ? 'bg-black' : 'bg-white/10'}`} />
+                )}
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="px-8 py-6 max-w-2xl">
+      <div className="w-full max-w-2xl px-4 py-5 sm:px-8 sm:py-6 md:min-h-0 md:flex-1 md:overflow-y-auto">
         {/* Step 1: Category */}
         {step === 1 && (
           <div>
             <p className="text-white/60 text-sm mb-5">What type of issue are you experiencing?</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {categories.map(cat => {
                 const Icon = cat.icon;
                 const isSelected = category === cat.value;
@@ -281,12 +292,13 @@ export function SubmitComplaint() {
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-white/80 mb-3" style={{ fontWeight: 500 }}>Priority Level</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {priorities.map(p => {
                   const isSelected = priority === p.value;
                   const tile = priorityTileStyle[p.value];
                   return (
                     <button
+                      type="button"
                       key={p.value}
                       onClick={() => setPriority(p.value)}
                       data-active={isSelected}

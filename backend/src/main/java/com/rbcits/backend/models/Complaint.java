@@ -10,11 +10,9 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.Temporal;
-import jakarta.persistence.TemporalType;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
-import java.util.Date;
+import java.time.Instant;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
@@ -40,17 +38,14 @@ public class Complaint {
     private String status;
     private String priority;
 
-    @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
-    private Date createdAt;
+    private Instant createdAt;
 
-    @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "updated_at")
-    private Date updatedAt;
+    private Instant updatedAt;
 
-    @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "resolved_at")
-    private Date resolvedAt;
+    private Instant resolvedAt;
 
     @ManyToOne
     @JoinColumn(name = "user_id")
@@ -80,12 +75,13 @@ public class Complaint {
 
     @PrePersist
     public void prePersist() {
-        createdAt = new Date();
-        updatedAt = new Date();
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
     }
 
     @PreUpdate
     public void preUpdate() {
-        updatedAt = new Date();
+        updatedAt = Instant.now();
     }
 }
