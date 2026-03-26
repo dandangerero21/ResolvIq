@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, Link, useSearchParams } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import DarkVeil from '../../../components/DarkVeil';
 import { ShieldAlert, ArrowRight, Loader } from 'lucide-react';
@@ -8,11 +8,22 @@ import { BackToHomeLink } from './BackToHomeLink';
 
 export function Login() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const registeredParam = searchParams.get('registered');
+  const registeredBanner =
+    registeredParam === 'user' || registeredParam === 'staff' ? registeredParam : null;
+
+  const dismissRegisteredBanner = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('registered');
+    setSearchParams(next, { replace: true });
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,9 +115,39 @@ export function Login() {
               <strong>Admin:</strong> admin@example.com / admin123
             </p>
             <p className="text-xs text-white/70 mt-1">
-              Create a new account for User or Staff roles
+              User accounts can sign in right away. Staff signups need admin approval first.
             </p>
           </div>
+
+          {registeredBanner === 'user' && (
+            <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+              <p className="text-xs text-emerald-200">
+                Account created. Sign in with the email and password you just used.
+              </p>
+              <button
+                type="button"
+                onClick={dismissRegisteredBanner}
+                className="mt-2 text-[11px] font-semibold text-emerald-300/90 underline-offset-2 hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+          {registeredBanner === 'staff' && (
+            <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+              <p className="text-xs text-amber-100">
+                Your staff application was submitted. An administrator will review it. You will be notified by email when
+                there is a decision (if email is configured). Do not try to sign in until you are approved.
+              </p>
+              <button
+                type="button"
+                onClick={dismissRegisteredBanner}
+                className="mt-2 text-[11px] font-semibold text-amber-200/90 underline-offset-2 hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">

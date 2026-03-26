@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import com.rbcits.backend.repositories.UserRepository;
+import com.rbcits.backend.DTOs.RegistrationResponse;
 import com.rbcits.backend.DTOs.UserDTO;
 import com.rbcits.backend.models.User;
 
@@ -14,43 +15,52 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final StaffApplicationService staffApplicationService;
 
     public UserService(
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            StaffApplicationService staffApplicationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.staffApplicationService = staffApplicationService;
     }
 
-    public UserDTO createUser(UserDTO dto) {
+    public RegistrationResponse createUser(UserDTO dto) {
 
-        if (userRepository.findByEmail(dto.getEmail()).isPresent() || userRepository.findByName(dto.getName()).isPresent()) {
-            throw new IllegalArgumentException("Email or name already in use");
-        }
-
-        if (dto.getRole() == null || (!dto.getRole().equals("user") && !dto.getRole().equals("staff"))) {
+        if (dto.getRole() == null || (!dto.getRole().equalsIgnoreCase("user") && !dto.getRole().equalsIgnoreCase("staff"))) {
             throw new IllegalArgumentException("Role must be either 'user' or 'staff'");
         }
 
-        if (dto.getRole().equals("staff") && (dto.getSpecialization() == null || dto.getSpecialization().isEmpty())) {
-            throw new IllegalArgumentException("Specialization is required for staff");
+        if (dto.getRole().equalsIgnoreCase("staff")) {
+            return staffApplicationService.submitFromRegistration(dto);
+        }
+
+        if (userRepository.findByEmail(dto.getEmail()).isPresent() || userRepository.findByName(dto.getName()).isPresent()) {
+            throw new IllegalArgumentException("Email or name already in use");
         }
 
         User user = new User();
         user.setName(dto.getName());
         user.setEmail(dto.getEmail());
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
-        user.setRole(dto.getRole());
+        user.setRole("user");
         user.setSpecialization(dto.getSpecialization());
 
-        User savedUser = userRepository.save(user);
-        return new UserDTO(savedUser.getUserId(), savedUser.getName(), savedUser.getEmail(), savedUser.getRole(), savedUser.getSpecialization());
+        userRepository.save(user);
+
+        return new RegistrationResponse(
+                RegistrationResponse.OUTCOME_USER_REGISTERED,
+                "Account created. Sign in with your email and password.");
     }
 
     public UserDTO loginUser(String email, String password) {
 
         Optional<User> userOpt = userRepository.findByEmail(email);
         if (userOpt.isEmpty()) {
+            if (staffApplicationService.hasPendingApplicationForEmail(email)) {
+                throw new IllegalArgumentException("Your staff application is still pending admin approval.");
+            }
             throw new IllegalArgumentException("User not found with email: " + email);
         }
 

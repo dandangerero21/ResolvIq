@@ -39,6 +39,7 @@ export function UserComplaintView() {
   const [isLoading, setIsLoading] = useState(true);
   const [showRating, setShowRating] = useState(false);
   const [rating, setRating] = useState(0);
+  const [ratingFeedback, setRatingFeedback] = useState('');
   const [hoveredRating, setHoveredRating] = useState(0);
   const [isConversationEnded, setIsConversationEnded] = useState(false);
   const [solutionAccepted, setSolutionAccepted] = useState(false);
@@ -208,7 +209,7 @@ export function UserComplaintView() {
           Number(staffId),
           Number(currentUser.userId) || Number(currentUser.id),
           rating,
-          ''
+          ratingFeedback.trim()
         );
         // Also update complaint status if not already done
         if (complaint.id) {
@@ -216,6 +217,7 @@ export function UserComplaintView() {
         }
         setHasSubmittedRating(true);
         setShowRating(false);
+        setRatingFeedback('');
       } catch (error) {
         console.error('Failed to submit rating:', error);
         alert('Failed to submit rating. Please try again.');
@@ -334,6 +336,24 @@ export function UserComplaintView() {
                 {' '}— {rating} star{rating > 1 ? 's' : ''}
               </p>
             )}
+
+            <div className="mb-6 text-left">
+              <label htmlFor="rating-feedback" className="mb-2 block text-left text-xs font-medium text-white/70">
+                Comments <span className="font-normal text-white/45">(optional)</span>
+              </label>
+              <textarea
+                id="rating-feedback"
+                value={ratingFeedback}
+                onChange={(e) => setRatingFeedback(e.target.value)}
+                rows={4}
+                maxLength={2000}
+                placeholder="Share what went well or what we could improve…"
+                className="w-full resize-y rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-red-500/40 focus:outline-none focus:ring-1 focus:ring-red-500/30"
+              />
+              <p className="mt-1.5 text-[11px] text-white/40">
+                4–5 star reviews with a short comment may appear on our homepage.
+              </p>
+            </div>
 
             <button
               onClick={handleSubmitRating}

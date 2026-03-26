@@ -18,6 +18,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/users/register").permitAll()
+                .requestMatchers("/api/staff-applications/**").permitAll()
                 .anyRequest().permitAll()
             )
             .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()));

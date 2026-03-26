@@ -117,7 +117,7 @@ const createParticleElement = (x: number, y: number, color: string = DEFAULT_GLO
     background: rgba(${color}, 1);
     box-shadow: 0 0 6px rgba(${color}, 0.6);
     pointer-events: none;
-    z-index: 100;
+    z-index: 2;
     left: ${x}px;
     top: ${y}px;
   `;
@@ -144,15 +144,37 @@ const calculateSpotlightValues = (radius: number) => ({
   fadeDistance: radius * 0.75
 });
 
-const updateCardGlowProperties = (card: HTMLElement, mouseX: number, mouseY: number, glow: number, radius: number) => {
+/** Smooth 0→1 ramp (C¹); avoids hard steps in glow falloff. */
+const smoothstep01 = (t: number) => {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
+};
+
+/**
+ * Drive border glow via inline CSS variables. (GSAP `quickTo` is unreliable for `%` + opacity
+ * custom properties, which is why the edge glow disappeared.)
+ */
+const updateCardGlowProperties = (
+  card: HTMLElement,
+  mouseX: number,
+  mouseY: number,
+  glow: number,
+  radius: number
+) => {
   const rect = card.getBoundingClientRect();
   const relativeX = ((mouseX - rect.left) / rect.width) * 100;
   const relativeY = ((mouseY - rect.top) / rect.height) * 100;
 
   card.style.setProperty('--glow-x', `${relativeX}%`);
   card.style.setProperty('--glow-y', `${relativeY}%`);
-  card.style.setProperty('--glow-intensity', glow.toString());
+  card.style.setProperty('--glow-intensity', String(glow));
   card.style.setProperty('--glow-radius', `${radius}px`);
+};
+
+const resetCardGlow = (card: HTMLElement) => {
+  card.style.setProperty('--glow-x', '50%');
+  card.style.setProperty('--glow-y', '50%');
+  card.style.setProperty('--glow-intensity', '0');
 };
 
 const ParticleCard: React.FC<{
@@ -177,6 +199,7 @@ const ParticleCard: React.FC<{
   enableMagnetism = false
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const particleLayerRef = useRef<HTMLDivElement>(null);
   const particlesRef = useRef<HTMLDivElement[]>([]);
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const isHoveredRef = useRef(false);
@@ -185,9 +208,9 @@ const ParticleCard: React.FC<{
   const magnetismAnimationRef = useRef<gsap.core.Tween | null>(null);
 
   const initializeParticles = useCallback(() => {
-    if (particlesInitialized.current || !cardRef.current) return;
+    if (particlesInitialized.current || !particleLayerRef.current) return;
 
-    const { width, height } = cardRef.current.getBoundingClientRect();
+    const { width, height } = particleLayerRef.current.getBoundingClientRect();
     memoizedParticles.current = Array.from({ length: particleCount }, () =>
       createParticleElement(Math.random() * width, Math.random() * height, glowColor)
     );
@@ -222,10 +245,10 @@ const ParticleCard: React.FC<{
 
     memoizedParticles.current.forEach((particle, index) => {
       const timeoutId = setTimeout(() => {
-        if (!isHoveredRef.current || !cardRef.current) return;
+        if (!isHoveredRef.current || !particleLayerRef.current) return;
 
         const clone = particle.cloneNode(true) as HTMLDivElement;
-        cardRef.current.appendChild(clone);
+        particleLayerRef.current.appendChild(clone);
         particlesRef.current.push(clone);
 
         gsap.fromTo(clone, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(1.7)' });
@@ -358,7 +381,7 @@ const ParticleCard: React.FC<{
         z-index: 1000;
       `;
 
-      element.appendChild(ripple);
+      (particleLayerRef.current ?? element).appendChild(ripple);
 
       gsap.fromTo(
         ripple,
@@ -394,10 +417,11 @@ const ParticleCard: React.FC<{
   return (
     <div
       ref={cardRef}
-      className={`${className} relative overflow-hidden`}
-      style={{ ...style, position: 'relative', overflow: 'hidden' }}
+      className={`${className} relative`}
+      style={{ ...style, position: 'relative' }}
     >
-      {children}
+      <div ref={particleLayerRef} className="absolute inset-0 z-[1] overflow-hidden rounded-[inherit] pointer-events-none" aria-hidden />
+      <div className="relative z-[2] flex min-h-0 flex-1 flex-col">{children}</div>
     </div>
   );
 };
@@ -459,16 +483,17 @@ const GlobalSpotlight: React.FC<{
       if (!mouseInside) {
         gsap.to(spotlightRef.current, {
           opacity: 0,
-          duration: 0.3,
-          ease: 'power2.out'
+          duration: 0.55,
+          ease: 'power3.out',
+          overwrite: 'auto'
         });
         cards.forEach(card => {
-          (card as HTMLElement).style.setProperty('--glow-intensity', '0');
+          resetCardGlow(card as HTMLElement);
         });
         return;
       }
 
-      const { proximity, fadeDistance } = calculateSpotlightValues(spotlightRadius);
+      const { fadeDistance } = calculateSpotlightValues(spotlightRadius);
       let minDistance = Infinity;
 
       cards.forEach(card => {
@@ -482,47 +507,36 @@ const GlobalSpotlight: React.FC<{
 
         minDistance = Math.min(minDistance, effectiveDistance);
 
-        let glowIntensity = 0;
-        if (effectiveDistance <= proximity) {
-          glowIntensity = 1;
-        } else if (effectiveDistance <= fadeDistance) {
-          glowIntensity = (fadeDistance - effectiveDistance) / (fadeDistance - proximity);
-        }
+        const glowIntensity =
+          effectiveDistance >= fadeDistance ? 0 : 1 - smoothstep01(effectiveDistance / fadeDistance);
 
         updateCardGlowProperties(cardElement, e.clientX, e.clientY, glowIntensity, spotlightRadius);
       });
 
+      const targetOpacity =
+        minDistance >= fadeDistance ? 0 : (1 - smoothstep01(minDistance / fadeDistance)) * 0.72;
+
       gsap.to(spotlightRef.current, {
         left: e.clientX,
         top: e.clientY,
-        duration: 0.1,
-        ease: 'power2.out'
-      });
-
-      const targetOpacity =
-        minDistance <= proximity
-          ? 0.8
-          : minDistance <= fadeDistance
-            ? ((fadeDistance - minDistance) / (fadeDistance - proximity)) * 0.8
-            : 0;
-
-      gsap.to(spotlightRef.current, {
         opacity: targetOpacity,
-        duration: targetOpacity > 0 ? 0.2 : 0.5,
-        ease: 'power2.out'
+        duration: 0.48,
+        ease: 'power3.out',
+        overwrite: 'auto'
       });
     };
 
     const handleMouseLeave = () => {
       isInsideSection.current = false;
       gridRef.current?.querySelectorAll('.card').forEach(card => {
-        (card as HTMLElement).style.setProperty('--glow-intensity', '0');
+        resetCardGlow(card as HTMLElement);
       });
       if (spotlightRef.current) {
         gsap.to(spotlightRef.current, {
           opacity: 0,
-          duration: 0.3,
-          ease: 'power2.out'
+          duration: 0.55,
+          ease: 'power3.out',
+          overwrite: 'auto'
         });
       }
     };
@@ -595,7 +609,7 @@ const MagicBento: React.FC<BentoProps> = ({
       ? 'bento-card-shell aspect-[4/3] min-h-[200px] w-full min-w-0'
       : 'bento-card-shell-dashboard aspect-[4/3] min-h-[140px] w-full min-w-0 sm:min-h-[160px]';
 
-  const innerClassName = `card flex h-full min-h-0 flex-col relative w-full max-w-full border border-solid font-light overflow-hidden ${
+  const innerClassName = `card flex h-full min-h-0 flex-col relative w-full max-w-full border border-solid font-light ${
     layout === 'homepage'
       ? 'p-6 sm:p-8 lg:p-10 xl:p-12 rounded-[24px] sm:rounded-[28px]'
       : 'p-4 sm:p-5 rounded-xl sm:rounded-2xl'
@@ -622,10 +636,6 @@ const MagicBento: React.FC<BentoProps> = ({
               backgroundColor: card.color || 'var(--background-dark)',
               borderColor: 'var(--border-color)',
               color: 'var(--white)',
-              '--glow-x': '50%',
-              '--glow-y': '50%',
-              '--glow-intensity': '0',
-              '--glow-radius': '200px'
             } as React.CSSProperties;
 
             if (enableStars) {
@@ -650,7 +660,7 @@ const MagicBento: React.FC<BentoProps> = ({
             return (
               <div key={index} className={shellClass}>
               <div
-                className={innerClassName}
+                className={`${innerClassName} overflow-hidden`}
                 style={cardStyle}
                 ref={el => {
                   if (!el) return;

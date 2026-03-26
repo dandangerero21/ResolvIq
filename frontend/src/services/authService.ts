@@ -18,6 +18,13 @@ export interface AuthResponse extends User {
   userId: number
 }
 
+export type RegistrationOutcome = 'user_registered' | 'staff_application_submitted'
+
+export interface RegistrationResult {
+  outcome: RegistrationOutcome
+  message: string
+}
+
 const authService = {
   login: async (email: string, password: string): Promise<AuthResponse> => {
     try {
@@ -33,20 +40,22 @@ const authService = {
     }
   },
 
-  signup: async (data: SignupRequest): Promise<AuthResponse> => {
+  signup: async (data: SignupRequest): Promise<RegistrationResult> => {
     try {
-      const response = await api.post('/users/register', {
+      const response = await api.post<RegistrationResult>('/users/register', {
         email: data.email,
         name: data.name,
         password: data.password,
         role: data.role,
         specialization: data.specialization || null,
       })
-      // Store user in localStorage immediately after signup
-      authService.setUser(response.data)
       return response.data
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Signup failed')
+      const msg =
+        typeof error.response?.data?.message === 'string'
+          ? error.response.data.message
+          : error.response?.data?.message?.toString?.() || 'Signup failed'
+      throw new Error(msg)
     }
   },
 

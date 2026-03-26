@@ -58,9 +58,11 @@ SPRING_DATASOURCE_PASSWORD=your_password
 | Key | Value |
 |-----|--------|
 | `SPRING_PROFILES_ACTIVE` | `prod` |
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://...` (see above) |
-| `SPRING_DATASOURCE_USERNAME` | Postgres user |
-| `SPRING_DATASOURCE_PASSWORD` | Postgres password |
+| `SPRING_DATASOURCE_URL` | **Only** `jdbc:postgresql://HOST:5432/DATABASE_NAME` — no username or password in this string |
+| `SPRING_DATASOURCE_USERNAME` | Postgres user (separate env var) |
+| `SPRING_DATASOURCE_PASSWORD` | Postgres password (separate env var) |
+
+Do **not** paste Render’s `postgresql://user:pass@host/db` string into `SPRING_DATASOURCE_URL`, and do **not** build a URL like `jdbc:postgresql://user:pass@host/db` — JDBC expects `HOST:PORT` after the second `//`, and user/password belong in `USERNAME` / `PASSWORD` above.
 | `CORS_ORIGINS` | Your **frontend** origin(s), comma-separated. Examples: `https://resolviq-frontend.onrender.com` or `https://*.onrender.com` |
 
 Render injects **`PORT`** automatically; the app uses `server.port=${PORT:8080}`.
@@ -122,6 +124,7 @@ Optional: copy `frontend/.env.example` to `frontend/.env.local` and override.
 | CORS errors in browser | `CORS_ORIGINS` includes your static site URL (scheme + host, no path). |
 | 502 / API down | Free tier **spins down** after idle; first request wakes the service (~30–60s). |
 | DB connection failed | JDBC URL uses **External** or **Internal** host correctly; internal only works from services in same region/account. |
+| `Driver claims to not accept jdbcUrl` / `invalid port number` | `SPRING_DATASOURCE_URL` must be `jdbc:postgresql://HOST:5432/dbname` only. Put user and password in `SPRING_DATASOURCE_USERNAME` and `SPRING_DATASOURCE_PASSWORD`, not inside the URL. |
 | Frontend calls wrong API | `VITE_API_URL` must be set **at build time** on Render; rebuild static site after changing it. |
 
 ---

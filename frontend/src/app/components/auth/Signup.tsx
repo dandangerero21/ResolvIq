@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router'
-import { useAuth } from '../../context/AuthContext';
 import DarkVeil from '../../../components/DarkVeil';
 import { ShieldAlert, ArrowRight, Loader, UserCog, User } from 'lucide-react';
 import authService from '../../../services/authService';
@@ -8,7 +7,6 @@ import { BackToHomeLink } from './BackToHomeLink';
 
 export function Signup() {
   const navigate = useNavigate();
-  const { login } = useAuth();
   const [step, setStep] = useState<'info' | 'role'>('info');
   const [formData, setFormData] = useState({
     name: '',
@@ -69,21 +67,15 @@ export function Signup() {
     setIsLoading(true);
 
     try {
-      const user = await authService.signup({
+      const result = await authService.signup({
         name: formData.name,
         email: formData.email,
         password: formData.password,
         role: roleData.role,
         specialization: roleData.specialization || undefined,
       });
-      login(user);
-
-      const routes: Record<string, string> = {
-        user: '/user/dashboard',
-        staff: '/staff/dashboard',
-        admin: '/admin/dashboard',
-      };
-      navigate(routes[user.role]);
+      const kind = result.outcome === 'staff_application_submitted' ? 'staff' : 'user'
+      navigate(`/login?registered=${encodeURIComponent(kind)}`, { replace: true })
     } catch (err: any) {
       setError(err.message || 'Signup failed. Please try again.');
     } finally {
@@ -314,6 +306,10 @@ export function Signup() {
                       required={roleData.role === 'staff'}
                     />
                     <p className="text-xs text-white/50 mt-1.5">Separate multiple specializations with commas</p>
+                    <p className="mt-2 text-xs text-amber-200/90">
+                      Staff signups are reviewed by an administrator. You will not be able to sign in until your
+                      application is approved (you may receive an email when a decision is made).
+                    </p>
                   </div>
                 )}
 

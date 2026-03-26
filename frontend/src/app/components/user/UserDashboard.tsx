@@ -99,7 +99,6 @@ export function UserDashboard() {
               glowColor="170 60 45"
               backgroundColor="rgba(6, 40, 38, 0.55)"
               borderRadius={14}
-              fillOpacity={0.12}
               className="shrink-0 self-start sm:self-auto"
             >
               <button

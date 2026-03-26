@@ -9,10 +9,14 @@ import com.rbcits.backend.models.Complaint;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
+
 @Repository
 public interface RatingRepository extends JpaRepository<Rating, Long> {
 
 	List<Rating> findByStaff(User staff);
 	Optional<Rating> findByComplaint(Complaint complaint);
+
+	List<Rating> findByScoreBetweenOrderByRatingIdDesc(int minScore, int maxScore, Pageable pageable);
 
 }

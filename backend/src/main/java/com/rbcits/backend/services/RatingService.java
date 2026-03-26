@@ -1,13 +1,17 @@
 package com.rbcits.backend.services;
 
 import com.rbcits.backend.DTOs.RatingDTO;
+import com.rbcits.backend.DTOs.RatingTestimonialDTO;
 import com.rbcits.backend.models.Rating;
 import com.rbcits.backend.models.Complaint;
 import com.rbcits.backend.models.User;
 import com.rbcits.backend.repositories.RatingRepository;
 import com.rbcits.backend.repositories.ComplaintRepository;
 import com.rbcits.backend.repositories.UserRepository;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -104,6 +108,45 @@ public class RatingService {
             throw new IllegalArgumentException("Rating not found");
         }
         ratingRepository.deleteById(id);
+    }
+
+    /**
+     * Ratings with scores 4–5 and non-empty feedback, newest first, for the marketing homepage.
+     */
+    @Transactional(readOnly = true)
+    public List<RatingTestimonialDTO> getPublicTestimonials(int limit) {
+        int cap = Math.min(Math.max(limit, 1), 50);
+        int fetchSize = Math.min(cap * 4, 200);
+        Pageable pageable = PageRequest.of(0, fetchSize);
+        return ratingRepository.findByScoreBetweenOrderByRatingIdDesc(4, 5, pageable).stream()
+                .filter(r -> r.getFeedback() != null && !r.getFeedback().isBlank())
+                .limit(cap)
+                .map(this::toTestimonialDTO)
+                .collect(Collectors.toList());
+    }
+
+    private RatingTestimonialDTO toTestimonialDTO(Rating r) {
+        User u = r.getUser();
+        String name = (u != null && u.getName() != null && !u.getName().isBlank())
+                ? u.getName().trim()
+                : "Customer";
+        return new RatingTestimonialDTO(
+                r.getRatingId(),
+                r.getScore(),
+                r.getFeedback().trim(),
+                name,
+                formatAuthorRole(u));
+    }
+
+    private String formatAuthorRole(User u) {
+        if (u == null || u.getRole() == null || u.getRole().isBlank()) {
+            return "";
+        }
+        String role = u.getRole().trim();
+        if (role.equalsIgnoreCase("user")) {
+            return "";
+        }
+        return Character.toUpperCase(role.charAt(0)) + role.substring(1).toLowerCase();
     }
 
     private RatingDTO convertToDTO(Rating rating) {

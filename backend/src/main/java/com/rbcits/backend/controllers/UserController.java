@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import org.springframework.web.bind.annotation.RequestBody;
+import com.rbcits.backend.DTOs.RegistrationResponse;
 import com.rbcits.backend.DTOs.UserDTO;
 import com.rbcits.backend.services.UserService;
 
@@ -22,7 +23,7 @@ public class UserController {
 
 
     @PostMapping("/register")
-    public UserDTO registerUser(@RequestBody UserDTO userDTO) {
+    public RegistrationResponse registerUser(@RequestBody UserDTO userDTO) {
         return userService.createUser(userDTO);
     }
 

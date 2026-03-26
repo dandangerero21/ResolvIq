@@ -11,6 +11,15 @@ export interface Rating {
   userName: string
 }
 
+/** Public homepage testimonials (scores 4–5 with feedback). */
+export interface RatingTestimonial {
+  id: number
+  score: number
+  feedback: string
+  authorName: string
+  authorRole: string
+}
+
 const ratingService = {
   createRating: async (
     complaintId: number,
@@ -37,6 +46,11 @@ const ratingService = {
 
   deleteRating: async (id: number): Promise<void> => {
     await api.delete(`/ratings/${id}`)
+  },
+
+  getPublicTestimonials: async (limit = 24): Promise<RatingTestimonial[]> => {
+    const response = await api.get<RatingTestimonial[]>('/ratings/public', { params: { limit } })
+    return response.data
   },
 }
 

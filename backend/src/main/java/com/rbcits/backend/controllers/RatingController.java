@@ -1,6 +1,7 @@
 package com.rbcits.backend.controllers;
 
 import com.rbcits.backend.DTOs.RatingDTO;
+import com.rbcits.backend.DTOs.RatingTestimonialDTO;
 import com.rbcits.backend.services.RatingService;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -22,6 +23,12 @@ public class RatingController {
                                  @RequestParam int score,
                                  @RequestParam String feedback) {
         return ratingService.createRating(complaintId, staffId, userId, score, feedback);
+    }
+
+    @GetMapping("/public")
+    public List<RatingTestimonialDTO> getPublicTestimonials(
+            @RequestParam(name = "limit", defaultValue = "24") int limit) {
+        return ratingService.getPublicTestimonials(limit);
     }
 
     @GetMapping("/staff/{staffId}")

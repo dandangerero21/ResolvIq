@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -10,9 +10,12 @@ import {
   Gauge,
   CheckCircle2,
   Sparkles,
+  Star,
   type LucideIcon,
 } from 'lucide-react';
 import MagicBento from '../../components/MagicBento';
+import LogoLoop, { type LogoItem } from '../../components/LogoLoop';
+import ratingService, { type RatingTestimonial } from '../../services/ratingService';
 
 const RED_GLOW = '220, 38, 38';
 
@@ -23,6 +26,69 @@ type HomeFeatureCard = {
   body: string;
   bullets: readonly string[];
 };
+
+function testimonialInitials(name: string) {
+  const parts = name.replace(/\./g, '').trim().split(/\s+/);
+  const a = parts[0]?.[0] ?? '';
+  const b = parts[1]?.[0] ?? parts[0]?.[1] ?? '';
+  return `${a}${b}`.toUpperCase() || '?';
+}
+
+function StarRow({ score }: { score: number }) {
+  return (
+    <div className="flex gap-0.5" role="img" aria-label={`${score} out of 5 stars`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star
+          key={i}
+          className={
+            i < score
+              ? 'h-3.5 w-3.5 fill-amber-400 text-amber-400'
+              : 'h-3.5 w-3.5 fill-transparent text-white/25'
+          }
+          aria-hidden
+        />
+      ))}
+    </div>
+  );
+}
+
+function TestimonialRatingCard({
+  score,
+  feedback,
+  authorName,
+  authorRole,
+}: {
+  score: number;
+  feedback: string;
+  authorName: string;
+  authorRole: string;
+}) {
+  const initials = testimonialInitials(authorName);
+  return (
+    <div className="w-[min(280px,85vw)] shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-left backdrop-blur-sm">
+      <StarRow score={score} />
+      <p className="mt-3 text-sm leading-relaxed text-white/75">&ldquo;{feedback}&rdquo;</p>
+      <div className="mt-4 flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-600/75 text-[11px] font-semibold text-white">
+          {initials}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium text-white">{authorName}</p>
+          {authorRole ? <p className="truncate text-[11px] text-white/45">{authorRole}</p> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function duplicateForMarquee<T>(items: readonly T[], minLength: number): T[] {
+  if (items.length === 0) return [];
+  const out = [...items];
+  while (out.length < minLength) {
+    out.push(...items);
+  }
+  return out;
+}
 
 const HOME_FEATURE_CARDS: HomeFeatureCard[] = [
   {
@@ -52,6 +118,47 @@ gsap.registerPlugin(ScrollTrigger);
 
 export function HomePage() {
   const rootRef = useRef<HTMLDivElement>(null);
+  const [testimonials, setTestimonials] = useState<RatingTestimonial[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    ratingService
+      .getPublicTestimonials(24)
+      .then((data) => {
+        if (!cancelled) setTestimonials(data);
+      })
+      .catch(() => {
+        if (!cancelled) setTestimonials([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ratingSummary = useMemo(() => {
+    if (!testimonials?.length) return null;
+    const sum = testimonials.reduce((s, t) => s + t.score, 0);
+    const avg = Math.round((sum / testimonials.length) * 10) / 10;
+    return { avg, count: testimonials.length };
+  }, [testimonials]);
+
+  const ratingLoopItems: LogoItem[] = useMemo(() => {
+    if (!testimonials?.length) return [];
+    const source = duplicateForMarquee(testimonials, 8);
+    return source.map((t) => ({
+      node: (
+        <TestimonialRatingCard
+          score={t.score}
+          feedback={t.feedback}
+          authorName={t.authorName}
+          authorRole={t.authorRole}
+        />
+      ),
+      ariaLabel: `Rated ${t.score} out of 5 stars. ${t.feedback} — ${t.authorName}${
+        t.authorRole ? `, ${t.authorRole}` : ''
+      }`,
+    }));
+  }, [testimonials]);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -129,48 +236,52 @@ export function HomePage() {
         }
       );
 
-      gsap.fromTo(
-        '.home-parallax-col-1',
-        { y: 0 },
-        {
-          y: -70,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: '.home-features',
-            start: 'top bottom',
-            end: 'bottom top',
-            scrub: 1.15,
-          },
-        }
-      );
-      gsap.fromTo(
-        '.home-parallax-col-2',
-        { y: 0 },
-        {
-          y: 55,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: '.home-features',
-            start: 'top bottom',
-            end: 'bottom top',
-            scrub: 1.15,
-          },
-        }
-      );
-      gsap.fromTo(
-        '.home-parallax-col-3',
-        { y: 0 },
-        {
-          y: -45,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: '.home-features',
-            start: 'top bottom',
-            end: 'bottom top',
-            scrub: 1.15,
-          },
-        }
-      );
+      // Parallax translateY does not reserve layout space; on stacked (mobile) cards it causes overlap.
+      const featureParallax = gsap.matchMedia();
+      featureParallax.add('(min-width: 1024px)', () => {
+        gsap.fromTo(
+          '.home-parallax-col-1',
+          { y: 0 },
+          {
+            y: -70,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: '.home-features',
+              start: 'top bottom',
+              end: 'bottom top',
+              scrub: 1.15,
+            },
+          }
+        );
+        gsap.fromTo(
+          '.home-parallax-col-2',
+          { y: 0 },
+          {
+            y: 55,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: '.home-features',
+              start: 'top bottom',
+              end: 'bottom top',
+              scrub: 1.15,
+            },
+          }
+        );
+        gsap.fromTo(
+          '.home-parallax-col-3',
+          { y: 0 },
+          {
+            y: -45,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: '.home-features',
+              start: 'top bottom',
+              end: 'bottom top',
+              scrub: 1.15,
+            },
+          }
+        );
+      });
 
       gsap.fromTo(
         '.home-stats-row',
@@ -310,6 +421,75 @@ export function HomePage() {
             <p className="mt-14 text-xs font-medium uppercase tracking-[0.25em] text-white/30">Scroll to explore</p>
           </div>
         </section>
+
+        {testimonials !== null && testimonials.length > 0 && ratingSummary && (
+          <section className="home-social-proof px-4 py-16 sm:px-6 sm:py-20 lg:px-8" aria-labelledby="social-proof-heading">
+            <div className="mx-auto max-w-7xl">
+              <div className="mx-auto max-w-3xl text-center">
+                <h2
+                  id="social-proof-heading"
+                  className="text-balance text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl"
+                >
+                  Trusted by teams who{' '}
+                  <span className="bg-gradient-to-r from-red-200 via-white to-red-200 bg-clip-text text-transparent">
+                    close the loop
+                  </span>
+                </h2>
+                <p className="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-white/50 sm:text-lg">
+                  Recent ratings from users who resolved complaints through ResolvIQ (4–5 stars).
+                </p>
+                <p className="mt-6 text-sm tabular-nums text-white/45">
+                  <span className="text-white/70">{ratingSummary.avg} average</span>
+                  <span className="mx-2 text-white/25" aria-hidden>
+                    ·
+                  </span>
+                  <span>{ratingSummary.count} ratings</span>
+                </p>
+              </div>
+
+              <div className="mt-12 space-y-8 sm:mt-14 sm:space-y-10">
+                <LogoLoop
+                  logos={ratingLoopItems}
+                  speed={100}
+                  direction="right"
+                  width="100%"
+                  gap={24}
+                  pauseOnHover
+                  hoverSpeed={-20}
+                  fadeOut
+                  fadeOutColor="#05010d"
+                  ariaLabel="Scrolling customer ratings, row one"
+                  className="py-1"
+                />
+                <LogoLoop
+                  logos={ratingLoopItems}
+                  speed={100}
+                  direction="left"
+                  width="100%"
+                  gap={24}
+                  pauseOnHover
+                  hoverSpeed={20}
+                  fadeOut
+                  fadeOutColor="#05010d"
+                  ariaLabel="Scrolling customer ratings, row two"
+                />
+                <LogoLoop
+                  logos={ratingLoopItems}
+                  speed={100}
+                  direction="right"
+                  width="100%"
+                  gap={24}
+                  pauseOnHover
+                  hoverSpeed={-20}
+                  fadeOut
+                  fadeOutColor="#05010d"
+                  ariaLabel="Scrolling customer ratings, row three"
+                  className="py-1"
+                />
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className="home-stats relative px-4 py-16 sm:px-6 lg:px-8">
           <div className="home-stats-row mx-auto grid max-w-7xl gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-md sm:grid-cols-3 sm:gap-6 sm:p-8">

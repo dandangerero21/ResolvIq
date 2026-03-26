@@ -10,7 +10,7 @@ export function getMagicBentoStyles(glowColor: string): string {
             --glow-intensity: 0;
             --glow-radius: 200px;
             --glow-color: ${glowColor};
-            --border-color: rgba(${glowColor}, 0.22);
+            --border-color: rgba(${glowColor}, 0.15);
             --background-dark: #05010d;
             --white: hsl(0, 0%, 100%);
             --purple-primary: rgba(${glowColor}, 1);
@@ -41,32 +41,32 @@ export function getMagicBentoStyles(glowColor: string): string {
             text-overflow: ellipsis;
           }
 
+          /* Cursor-tracking border glow: radial hotspot at --glow-x/--glow-y, masked to the 2px border ring.
+             GlobalSpotlight sets --glow-x/--glow-y (%) and --glow-intensity (0–1) per .card via JS. */
           .bento-section .card--border-glow::after {
             content: '';
             position: absolute;
-            inset: 0;
-            padding: 6px;
-            background: radial-gradient(var(--glow-radius) circle at var(--glow-x) var(--glow-y),
-                rgba(${glowColor}, calc(var(--glow-intensity) * 0.8)) 0%,
-                rgba(${glowColor}, calc(var(--glow-intensity) * 0.4)) 30%,
-                transparent 60%);
+            inset: -1px;
+            padding: 2px;
             border-radius: inherit;
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            background:
+              radial-gradient(
+                600px circle at var(--glow-x, 50%) var(--glow-y, 50%),
+                rgba(${glowColor}, 1) 0%,
+                rgba(${glowColor}, 0.4) 25%,
+                transparent 45%
+              );
+            -webkit-mask:
+              linear-gradient(#fff 0 0) content-box,
+              linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor;
-            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask:
+              linear-gradient(#fff 0 0) content-box,
+              linear-gradient(#fff 0 0);
             mask-composite: exclude;
             pointer-events: none;
-            opacity: 1;
-            transition: opacity 0.3s ease;
-            z-index: 1;
-          }
-
-          .bento-section .card--border-glow:hover::after {
-            opacity: 1;
-          }
-
-          .bento-section .card--border-glow:hover {
-            box-shadow: 0 4px 20px rgba(46, 24, 78, 0.4), 0 0 30px rgba(${glowColor}, 0.2);
+            opacity: var(--glow-intensity, 0);
+            z-index: 50;
           }
 
           .bento-section .particle::before {
@@ -191,8 +191,10 @@ export function getMagicBentoStyles(glowColor: string): string {
           }
 
           .bento-section--homepage .bento-card-shell:hover .card {
-            box-shadow: 0 22px 55px rgba(0, 0, 0, 0.48);
-            border-color: rgba(var(--glow-color), 0.42);
+            box-shadow:
+              0 0 0 1px rgba(${glowColor}, 0.25),
+              0 22px 55px rgba(0, 0, 0, 0.48);
+            border-color: rgba(${glowColor}, 0.35);
           }
 
           @media (prefers-reduced-motion: reduce) {
@@ -278,8 +280,10 @@ export function getMagicBentoStyles(glowColor: string): string {
           }
 
           .bento-section--dashboard .bento-card-shell-dashboard:hover .card {
-            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-            border-color: rgba(var(--glow-color), 0.35);
+            box-shadow:
+              0 0 0 1px rgba(${glowColor}, 0.2),
+              0 10px 28px rgba(0, 0, 0, 0.35);
+            border-color: rgba(${glowColor}, 0.3);
           }
 
           @media (prefers-reduced-motion: reduce) {

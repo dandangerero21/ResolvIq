@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { ComplaintCard } from '../shared/ComplaintCard';
 import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
+import staffApplicationService, { StaffApplicationView } from '../../../services/staffApplicationService';
 import { Complaint } from '../../types';
 import {
   ClipboardList,
@@ -17,6 +18,8 @@ import {
   BarChart3,
   Users,
   Loader,
+  UserPlus,
+  XCircle,
 } from 'lucide-react';
 
 type FilterKey = 'all' | 'open' | 'inprogress' | 'resolved';
@@ -28,6 +31,30 @@ export function AdminDashboard() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [staffApplications, setStaffApplications] = useState<StaffApplicationView[]>([]);
+  const [staffAppsLoading, setStaffAppsLoading] = useState(false);
+  const [staffActionId, setStaffActionId] = useState<number | null>(null);
+
+  const refreshStaffApplications = useCallback(async () => {
+    if (currentUser?.role !== 'admin') {
+      setStaffApplications([]);
+      return;
+    }
+    setStaffAppsLoading(true);
+    try {
+      const list = await staffApplicationService.getPending();
+      setStaffApplications(list);
+    } catch (e) {
+      console.error('Failed to load staff applications', e);
+      setStaffApplications([]);
+    } finally {
+      setStaffAppsLoading(false);
+    }
+  }, [currentUser?.role]);
+
+  useEffect(() => {
+    void refreshStaffApplications();
+  }, [refreshStaffApplications]);
 
   useEffect(() => {
     const loadComplaints = async () => {
@@ -160,6 +187,87 @@ export function AdminDashboard() {
       </div>
 
       <div className="min-w-0 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 md:min-h-0 md:flex-1 md:overflow-y-auto">
+        {currentUser?.role === 'admin' && (
+          <div className="mb-8">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-white" style={{ fontWeight: 600 }}>
+                <UserPlus className="h-4 w-4 text-amber-400" />
+                Pending staff applications
+              </h3>
+              {staffAppsLoading && <Loader className="h-4 w-4 animate-spin text-white/40" />}
+            </div>
+            {staffApplications.length === 0 && !staffAppsLoading ? (
+              <p className="text-sm text-white/50">No pending staff applications.</p>
+            ) : (
+              <ul className="space-y-3">
+                {staffApplications.map(app => (
+                  <li
+                    key={app.id}
+                    className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm text-white" style={{ fontWeight: 600 }}>
+                        {app.name}
+                      </p>
+                      <p className="text-xs text-white/60">{app.email}</p>
+                      <p className="mt-1 text-xs text-white/50">{app.specialization}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-wider text-white/35">
+                        Submitted {new Date(app.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={staffActionId !== null}
+                        onClick={async () => {
+                          setStaffActionId(app.id);
+                          try {
+                            await staffApplicationService.approve(app.id, currentUser?.userId);
+                            await refreshStaffApplications();
+                          } catch (err) {
+                            console.error(err);
+                            alert(err instanceof Error ? err.message : 'Approve failed');
+                          } finally {
+                            setStaffActionId(null);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/90 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={staffActionId !== null}
+                        onClick={async () => {
+                          const note = window.prompt('Optional note to include in the rejection email (leave blank for none):') ?? '';
+                          setStaffActionId(app.id);
+                          try {
+                            await staffApplicationService.reject(app.id, {
+                              reviewerUserId: currentUser?.userId,
+                              note: note || undefined,
+                            });
+                            await refreshStaffApplications();
+                          } catch (err) {
+                            console.error(err);
+                            alert(err instanceof Error ? err.message : 'Reject failed');
+                          } finally {
+                            setStaffActionId(null);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs font-semibold text-red-200 transition-colors hover:bg-red-900/50 disabled:opacity-50"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        Reject
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {/* Bento: stats row + tall resolution + wide assignment (lg+) */}
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {statsCards.map(card => {
