@@ -1,5 +1,8 @@
 package com.rbcits.backend.services;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,28 +11,47 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import jakarta.mail.internet.MimeMessage;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 @Service
 public class MailNotificationService {
 
     private static final Logger log = LoggerFactory.getLogger(MailNotificationService.class);
+    private static final URI POSTMARK_EMAIL_URI = URI.create("https://api.postmarkapp.com/email");
 
     private final JavaMailSender mailSender;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final String postmarkServerToken;
+    private final boolean usePostmarkApi;
     private final boolean mailEnabled;
     private final String fromAddress;
     private final String adminNotifyEmail;
     private final String appName;
 
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(15))
+            .build();
+
     public MailNotificationService(
             @Autowired(required = false) JavaMailSender mailSender,
+            @Value("${POSTMARK_SERVER_TOKEN:}") String postmarkServerToken,
             @Value("${app.mail.enabled:false}") boolean mailEnabled,
             @Value("${app.mail.from:noreply@localhost}") String fromAddress,
             @Value("${app.mail.admin-notify:}") String adminNotifyEmail,
             @Value("${app.mail.app-name:ResolvIQ}") String appName) {
         this.mailSender = mailSender;
-        this.mailEnabled = mailEnabled && mailSender != null;
+        this.postmarkServerToken = postmarkServerToken == null ? "" : postmarkServerToken.trim();
+        this.usePostmarkApi = StringUtils.hasText(this.postmarkServerToken);
+        this.mailEnabled = mailEnabled && (usePostmarkApi || mailSender != null);
         this.fromAddress = fromAddress;
         this.adminNotifyEmail = adminNotifyEmail == null ? "" : adminNotifyEmail.trim();
         this.appName = appName;
@@ -38,6 +60,14 @@ public class MailNotificationService {
     /** Fallback plain-only send (e.g. if MIME fails). */
     public void sendPlain(String to, String subject, String text) {
         if (!mailEnabled || to == null || to.isBlank()) {
+            return;
+        }
+        if (usePostmarkApi) {
+            try {
+                sendViaPostmark(to, subject, text, null);
+            } catch (Exception e) {
+                log.warn("Failed to send email to {}: {}", to, e.getMessage());
+            }
             return;
         }
         try {
@@ -56,9 +86,22 @@ public class MailNotificationService {
         if (!mailEnabled || to == null || to.isBlank()) {
             return;
         }
+        if (usePostmarkApi) {
+            try {
+                sendViaPostmark(to, subject, plainText, htmlBody);
+            } catch (Exception e) {
+                log.warn("Failed to send HTML email to {}: {}", to, e.getMessage());
+                try {
+                    sendViaPostmark(to, subject, plainText, null);
+                } catch (Exception e2) {
+                    log.warn("Postmark plain fallback failed for {}: {}", to, e2.getMessage());
+                }
+            }
+            return;
+        }
         try {
             MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
             helper.setFrom(fromAddress);
             helper.setTo(to);
             helper.setSubject(subject);
@@ -67,6 +110,42 @@ public class MailNotificationService {
         } catch (Exception e) {
             log.warn("Failed to send HTML email to {}: {}", to, e.getMessage());
             sendPlain(to, subject, plainText);
+        }
+    }
+
+    private void sendViaPostmark(String to, String subject, String plainText, String htmlBody) throws Exception {
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("From", fromAddress);
+        root.put("To", to);
+        root.put("Subject", subject);
+        root.put("TextBody", plainText == null ? "" : plainText);
+        if (htmlBody != null && !htmlBody.isBlank()) {
+            root.put("HtmlBody", htmlBody);
+        }
+        root.put("MessageStream", "outbound");
+
+        String json = objectMapper.writeValueAsString(root);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(POSTMARK_EMAIL_URI)
+                .timeout(Duration.ofSeconds(30))
+                .header("X-Postmark-Server-Token", postmarkServerToken)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            String detail = response.body();
+            try {
+                JsonNode err = objectMapper.readTree(detail);
+                if (err.has("Message")) {
+                    detail = err.get("Message").asText();
+                }
+            } catch (Exception ignored) {
+                // keep raw body
+            }
+            throw new IllegalStateException("Postmark HTTP " + response.statusCode() + ": " + detail);
         }
     }
 

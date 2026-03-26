@@ -51,7 +51,7 @@ Change these in any real deployment.
 
 ## Configuration
 
-- **Backend:** Environment variables and `application.properties` / `application-prod.properties` — database URL, `SPRING_PROFILES_ACTIVE=prod` for production, CORS (`CORS_ORIGINS`), and optional mail (`MAIL_ENABLED`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `ADMIN_NOTIFY_EMAIL`, `APP_DISPLAY_NAME`).
+- **Backend:** Environment variables and `application.properties` / `application-prod.properties` — database URL, `SPRING_PROFILES_ACTIVE=prod` for production, CORS (`CORS_ORIGINS`), and optional mail: set `MAIL_ENABLED=true`, `MAIL_FROM`, `ADMIN_NOTIFY_EMAIL`, etc. For **Postmark on Render** (SMTP often blocked), set **`POSTMARK_SERVER_TOKEN`** — the app uses Postmark’s **HTTPS API** and does not open SMTP. For traditional SMTP, set `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` (ignored when `POSTMARK_SERVER_TOKEN` is set).
 - **Frontend:** `VITE_API_URL` for the REST API base URL when not using the default.
 
 ## Project layout
