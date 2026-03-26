@@ -82,6 +82,7 @@ public class StaffApplicationService {
         }
 
         mailNotificationService.notifyAdminNewStaffApplication(name, email, dto.getSpecialization().trim());
+        mailNotificationService.notifyApplicantStaffApplicationReceived(email, name);
 
         return new RegistrationResponse(
                 RegistrationResponse.OUTCOME_STAFF_APPLICATION_SUBMITTED,

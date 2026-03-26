@@ -13,6 +13,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.mail.internet.MimeMessage;
 
 import java.net.URI;
@@ -32,6 +33,8 @@ public class MailNotificationService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final String postmarkServerToken;
     private final boolean usePostmarkApi;
+    /** True when MAIL_ENABLED / app.mail.enabled is set in config (before transport checks). */
+    private final boolean mailEnabledRequested;
     private final boolean mailEnabled;
     private final String fromAddress;
     private final String adminNotifyEmail;
@@ -43,7 +46,7 @@ public class MailNotificationService {
 
     public MailNotificationService(
             @Autowired(required = false) JavaMailSender mailSender,
-            @Value("${POSTMARK_SERVER_TOKEN:}") String postmarkServerToken,
+            @Value("${POSTMARK_SERVER_TOKEN:${POSTMARK_API_TOKEN:}}") String postmarkServerToken,
             @Value("${app.mail.enabled:false}") boolean mailEnabled,
             @Value("${app.mail.from:noreply@localhost}") String fromAddress,
             @Value("${app.mail.admin-notify:}") String adminNotifyEmail,
@@ -51,15 +54,41 @@ public class MailNotificationService {
         this.mailSender = mailSender;
         this.postmarkServerToken = postmarkServerToken == null ? "" : postmarkServerToken.trim();
         this.usePostmarkApi = StringUtils.hasText(this.postmarkServerToken);
+        this.mailEnabledRequested = mailEnabled;
         this.mailEnabled = mailEnabled && (usePostmarkApi || mailSender != null);
         this.fromAddress = fromAddress;
         this.adminNotifyEmail = adminNotifyEmail == null ? "" : adminNotifyEmail.trim();
         this.appName = appName;
     }
 
+    @PostConstruct
+    void logMailConfiguration() {
+        if (!mailEnabledRequested) {
+            log.info("Mail: disabled (set MAIL_ENABLED=true to send).");
+            return;
+        }
+        if (!mailEnabled) {
+            log.warn(
+                    "Mail: MAIL_ENABLED is true but no transport is configured. Set POSTMARK_SERVER_TOKEN (Render) or spring.mail.host (SMTP). No emails will be sent.");
+            return;
+        }
+        log.info(
+                "Mail: enabled via {} | from={} | adminNotify={}",
+                usePostmarkApi ? "Postmark API" : "SMTP",
+                fromAddress,
+                adminNotifyEmail.isBlank() ? "(not set — set ADMIN_NOTIFY_EMAIL or APP_MAIL_ADMIN_NOTIFY)" : adminNotifyEmail);
+        if (usePostmarkApi) {
+            log.info(
+                    "Postmark: confirm you are using a **Live** server API token in Postmark (not Sandbox), or mail will not reach real inboxes.");
+        }
+    }
+
     /** Fallback plain-only send (e.g. if MIME fails). */
     public void sendPlain(String to, String subject, String text) {
         if (!mailEnabled || to == null || to.isBlank()) {
+            if (mailEnabledRequested && !mailEnabled) {
+                log.debug("Mail send skipped (transport not configured): to={} subject={}", to, subject);
+            }
             return;
         }
         if (usePostmarkApi) {
@@ -77,6 +106,7 @@ public class MailNotificationService {
             message.setSubject(subject);
             message.setText(text);
             mailSender.send(message);
+            log.info("Mail sent via SMTP to={} subject={}", to, subject);
         } catch (Exception e) {
             log.warn("Failed to send email to {}: {}", to, e.getMessage());
         }
@@ -84,6 +114,9 @@ public class MailNotificationService {
 
     public void sendHtmlMultipart(String to, String subject, String plainText, String htmlBody) {
         if (!mailEnabled || to == null || to.isBlank()) {
+            if (mailEnabledRequested && !mailEnabled) {
+                log.debug("Mail send skipped (transport not configured): to={} subject={}", to, subject);
+            }
             return;
         }
         if (usePostmarkApi) {
@@ -107,6 +140,7 @@ public class MailNotificationService {
             helper.setSubject(subject);
             helper.setText(plainText, htmlBody);
             mailSender.send(message);
+            log.info("Mail sent via SMTP to={} subject={}", to, subject);
         } catch (Exception e) {
             log.warn("Failed to send HTML email to {}: {}", to, e.getMessage());
             sendPlain(to, subject, plainText);
@@ -135,8 +169,9 @@ public class MailNotificationService {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        String responseBody = response.body();
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String detail = response.body();
+            String detail = responseBody;
             try {
                 JsonNode err = objectMapper.readTree(detail);
                 if (err.has("Message")) {
@@ -147,11 +182,27 @@ public class MailNotificationService {
             }
             throw new IllegalStateException("Postmark HTTP " + response.statusCode() + ": " + detail);
         }
+        String messageId = "";
+        try {
+            JsonNode ok = objectMapper.readTree(responseBody);
+            if (ok.has("MessageID")) {
+                messageId = ok.get("MessageID").asText();
+            }
+        } catch (Exception ignored) {
+            // ignore
+        }
+        log.info(
+                "Mail sent via Postmark to={} subject={} messageId={} (if MessageID empty, check Postmark Activity; Sandbox servers do not deliver to real inboxes)",
+                to,
+                subject,
+                messageId.isEmpty() ? "—" : messageId);
     }
 
     public void notifyAdminNewStaffApplication(String applicantName, String applicantEmail, String specialization) {
         if (adminNotifyEmail.isBlank()) {
-            log.debug("app.mail.admin-notify not set; skipping admin notification for staff application");
+            log.warn(
+                    "Skipping admin staff-application email: ADMIN_NOTIFY_EMAIL is not set (applicant was {}).",
+                    applicantEmail);
             return;
         }
         String subject = "[" + appName + "] New staff application — " + applicantEmail;
@@ -171,6 +222,7 @@ public class MailNotificationService {
                 + EmailHtmlTemplates.mutedLine("Submitted through " + EmailHtmlTemplates.escape(appName) + ".");
 
         String html = EmailHtmlTemplates.layout(appName, "New staff application", inner);
+        log.info("Sending staff-application alert to admin inbox: {}", adminNotifyEmail);
         sendHtmlMultipart(adminNotifyEmail, subject, plain, html);
     }
 
@@ -197,6 +249,29 @@ public class MailNotificationService {
                                 "You’re cleared to use the staff dashboard. Welcome to the team.");
 
         String html = EmailHtmlTemplates.layout(appName, "You’re approved", inner);
+        sendHtmlMultipart(applicantEmail, subject, plain, html);
+    }
+
+    /**
+     * Sent to the applicant immediately after a staff application is submitted (separate from admin alert).
+     */
+    public void notifyApplicantStaffApplicationReceived(String applicantEmail, String applicantName) {
+        String subject = "[" + appName + "] We received your staff application";
+        String plain = String.format(
+                "Hello %s,%n%nWe received your staff application for %s. An administrator will review it. You will get another email when you are approved or not approved.%n%nYou cannot sign in until you are approved.%n",
+                applicantName, appName);
+        String inner =
+                EmailHtmlTemplates.paragraph("Hello " + EmailHtmlTemplates.escape(applicantName) + ",")
+                        + EmailHtmlTemplates.paragraph(
+                                "We received your <strong style=\"color:"
+                                        + EmailHtmlTemplates.ACCENT
+                                        + ";\">staff application</strong> for "
+                                        + EmailHtmlTemplates.escape(appName)
+                                        + ". An administrator will review it soon.")
+                        + EmailHtmlTemplates.paragraph(
+                                "You will receive another email when your application is approved or not approved.")
+                        + EmailHtmlTemplates.mutedLine("You cannot sign in until an admin approves your application.");
+        String html = EmailHtmlTemplates.layout(appName, "Application received", inner);
         sendHtmlMultipart(applicantEmail, subject, plain, html);
     }
 

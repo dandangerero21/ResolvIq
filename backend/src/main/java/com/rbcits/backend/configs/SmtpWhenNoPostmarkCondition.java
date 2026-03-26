@@ -14,6 +14,9 @@ public class SmtpWhenNoPostmarkCondition implements Condition {
     @Override
     public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
         String token = context.getEnvironment().getProperty("POSTMARK_SERVER_TOKEN", "");
+        if (!StringUtils.hasText(token)) {
+            token = context.getEnvironment().getProperty("POSTMARK_API_TOKEN", "");
+        }
         if (StringUtils.hasText(token)) {
             return false;
         }
