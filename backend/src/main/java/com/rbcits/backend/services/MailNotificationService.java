@@ -33,7 +33,7 @@ public class MailNotificationService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final String postmarkServerToken;
     private final boolean usePostmarkApi;
-    /** True when MAIL_ENABLED / app.mail.enabled is set in config (before transport checks). */
+    /** True when email is requested explicitly or implied by Postmark token presence. */
     private final boolean mailEnabledRequested;
     private final boolean mailEnabled;
     private final String fromAddress;
@@ -54,8 +54,8 @@ public class MailNotificationService {
         this.mailSender = mailSender;
         this.postmarkServerToken = postmarkServerToken == null ? "" : postmarkServerToken.trim();
         this.usePostmarkApi = StringUtils.hasText(this.postmarkServerToken);
-        this.mailEnabledRequested = mailEnabled;
-        this.mailEnabled = mailEnabled && (usePostmarkApi || mailSender != null);
+        this.mailEnabledRequested = mailEnabled || this.usePostmarkApi;
+        this.mailEnabled = this.mailEnabledRequested && (usePostmarkApi || mailSender != null);
         this.fromAddress = fromAddress;
         this.adminNotifyEmail = adminNotifyEmail == null ? "" : adminNotifyEmail.trim();
         this.appName = appName;
@@ -63,8 +63,8 @@ public class MailNotificationService {
 
     @PostConstruct
     void logMailConfiguration() {
-        if (!mailEnabledRequested) {
-            log.info("Mail: disabled (set MAIL_ENABLED=true to send).");
+        if (!mailEnabledRequested && !usePostmarkApi) {
+            log.info("Mail: disabled (set MAIL_ENABLED=true or provide POSTMARK_SERVER_TOKEN to send).");
             return;
         }
         if (!mailEnabled) {
@@ -80,6 +80,11 @@ public class MailNotificationService {
         if (usePostmarkApi) {
             log.info(
                     "Postmark: confirm you are using a **Live** server API token in Postmark (not Sandbox), or mail will not reach real inboxes.");
+            if (fromAddress.isBlank() || fromAddress.endsWith("@localhost")) {
+                log.warn(
+                        "Postmark: app.mail.from={} is likely invalid for delivery. Set MAIL_FROM (or APP_MAIL_FROM/POSTMARK_FROM) to a verified Postmark sender/domain address.",
+                        fromAddress);
+            }
         }
     }
 
