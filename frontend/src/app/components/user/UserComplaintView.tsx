@@ -42,6 +42,8 @@ export function UserComplaintView() {
   const [ratingFeedback, setRatingFeedback] = useState('');
   const [hoveredRating, setHoveredRating] = useState(0);
   const [isConversationEnded, setIsConversationEnded] = useState(false);
+  /** Tracks whether the user used "End conversation" vs staff resolving remotely (persisted in sessionStorage). */
+  const [conversationEndedBy, setConversationEndedBy] = useState<'user' | 'staff'>('staff');
   const [solutionAccepted, setSolutionAccepted] = useState(false);
   const [dismissedSolutionId, setDismissedSolutionId] = useState<number | null>(null);
   const [hasSubmittedRating, setHasSubmittedRating] = useState(false);
@@ -55,6 +57,13 @@ export function UserComplaintView() {
         if (id) {
           const backendComplaint = await complaintService.getComplaintById(Number(id));
           setComplaint(backendComplaint);
+          const resolved =
+            backendComplaint.status === 'resolved' || backendComplaint.status === 'Resolved';
+          if (resolved && backendComplaint.complaintId) {
+            setIsConversationEnded(true);
+            const key = `complaint-ended-by-${backendComplaint.complaintId}`;
+            setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+          }
         }
       } catch (error) {
         console.error('Failed to load complaint from backend:', error);
@@ -64,6 +73,15 @@ export function UserComplaintView() {
           c.complaintId?.toString() === id
         );
         setComplaint(contextComplaint || null);
+        if (contextComplaint?.complaintId) {
+          const resolved =
+            contextComplaint.status === 'resolved' || contextComplaint.status === 'Resolved';
+          if (resolved) {
+            setIsConversationEnded(true);
+            const key = `complaint-ended-by-${contextComplaint.complaintId}`;
+            setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+          }
+        }
       } finally {
         setIsLoading(false);
       }
@@ -87,9 +105,11 @@ export function UserComplaintView() {
           const updatedComplaint = await complaintService.getComplaintById(complaint.complaintId!);
           setComplaint(updatedComplaint);
           
-          // Check if complaint status changed to resolved (other party ended conversation)
+          // Resolved on the server — attribute to user only if they used "End conversation" (see sessionStorage).
           if ((updatedComplaint.status === 'resolved' || updatedComplaint.status === 'Resolved') && !isConversationEnded) {
             setIsConversationEnded(true);
+            const key = `complaint-ended-by-${complaint.complaintId}`;
+            setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
           }
         } catch (complaintError) {
           // Log but don't crash - complaint might not exist in backend yet
@@ -230,6 +250,8 @@ export function UserComplaintView() {
     try {
       // Update complaint status to resolved
       await complaintService.updateComplaintStatus(complaint.complaintId, 'resolved');
+      sessionStorage.setItem(`complaint-ended-by-${complaint.complaintId}`, 'user');
+      setConversationEndedBy('user');
       setIsConversationEnded(true);
       setShowRating(true);
     } catch (error) {
@@ -399,6 +421,7 @@ export function UserComplaintView() {
               onSolutionAccepted={handleSolutionAccepted}
               onSolutionRejected={handleSolutionRejected}
               isConversationEnded={isConversationEnded}
+              conversationEndedBy={conversationEndedBy}
               solutionAccepted={solutionAccepted}
               dismissedSolutionId={dismissedSolutionId}
             />

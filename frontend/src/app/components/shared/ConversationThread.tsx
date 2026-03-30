@@ -13,6 +13,8 @@ interface ConversationThreadProps {
   onSolutionRejected?: () => void;
   isStaff?: boolean;
   isConversationEnded?: boolean;
+  /** Who closed the thread from the customer's perspective (user "End conversation" vs staff). */
+  conversationEndedBy?: 'user' | 'staff';
   solutionAccepted?: boolean;
   dismissedSolutionId?: number | null;
 }
@@ -26,6 +28,7 @@ export function ConversationThread({
   onSolutionRejected,
   isStaff = false,
   isConversationEnded = false,
+  conversationEndedBy = 'staff',
   solutionAccepted = false,
   dismissedSolutionId = null,
 }: ConversationThreadProps) {
@@ -217,7 +220,7 @@ export function ConversationThread({
                     onSolutionRejected();
                   }
                 }}
-                className="flex-shrink-0 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs rounded-lg transition-colors"
+                className="flex-shrink-0 rounded-lg border border-green-600/80 bg-white px-3 py-1.5 text-xs text-green-900 shadow-sm transition-colors hover:border-green-700 hover:bg-green-50"
                 style={{ fontWeight: 500 }}
               >
                 No
@@ -246,7 +249,11 @@ export function ConversationThread({
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm text-amber-900" style={{ fontWeight: 600 }}>Conversation ended by staff</p>
+              <p className="text-sm text-amber-900" style={{ fontWeight: 600 }}>
+                {conversationEndedBy === 'user'
+                  ? 'You ended this conversation'
+                  : 'Conversation ended by staff'}
+              </p>
               <p className="text-xs text-amber-700 mt-1">You can now rate your experience with the staff member's service.</p>
             </div>
           </div>

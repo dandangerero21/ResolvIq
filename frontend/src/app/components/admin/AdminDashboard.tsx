@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { ComplaintCard } from '../shared/ComplaintCard';
+import { ComplaintSortSelect } from '../shared/ComplaintSortSelect';
 import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
 import staffApplicationService, { StaffApplicationView } from '../../../services/staffApplicationService';
 import { Complaint } from '../../types';
+import { sortComplaints, partitionActiveAndResolved, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
   ClipboardList,
   Clock,
@@ -31,6 +33,7 @@ export function AdminDashboard() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [sortBy, setSortBy] = useState<ComplaintSortKey>('newest');
   const [staffApplications, setStaffApplications] = useState<StaffApplicationView[]>([]);
   const [staffAppsLoading, setStaffAppsLoading] = useState(false);
   const [staffActionId, setStaffActionId] = useState<number | null>(null);
@@ -84,6 +87,20 @@ export function AdminDashboard() {
     filter === 'inprogress' ? inProgress :
     filter === 'resolved' ? resolved :
     displayComplaints;
+
+  const sortedComplaints = useMemo(
+    () => sortComplaints(filteredComplaints, sortBy),
+    [filteredComplaints, sortBy]
+  );
+
+  const { active: activeSorted, resolved: resolvedSorted } = useMemo(
+    () => partitionActiveAndResolved(sortedComplaints),
+    [sortedComplaints]
+  );
+
+  /** Resolved pinned to bottom only when "All" shows both active and resolved rows. */
+  const showResolvedSection =
+    filter === 'all' && activeSorted.length > 0 && resolvedSorted.length > 0;
 
   const resolutionRate = total > 0 ? Math.round((resolved.length / total) * 100) : 0;
 
@@ -386,7 +403,7 @@ export function AdminDashboard() {
         </div>
 
         {/* Complaint list */}
-        <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+        <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="min-w-0 truncate text-white" style={{ fontWeight: 600 }}>
             {filter === 'all'
               ? 'All Complaints'
@@ -396,9 +413,17 @@ export function AdminDashboard() {
                   ? 'In Progress Complaints'
                   : 'Resolved Complaints'}
           </h3>
-          <div className="flex shrink-0 items-center gap-1.5 text-xs text-white/60">
-            <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-            {filteredComplaints.length} complaint{filteredComplaints.length !== 1 ? 's' : ''}
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 sm:gap-4">
+            <ComplaintSortSelect
+              id="admin-complaint-sort"
+              variant="admin"
+              value={sortBy}
+              onChange={setSortBy}
+            />
+            <div className="flex items-center gap-1.5 text-xs text-white/60">
+              <TrendingUp className="h-3.5 w-3.5 shrink-0" />
+              {sortedComplaints.length} complaint{sortedComplaints.length !== 1 ? 's' : ''}
+            </div>
           </div>
         </div>
 
@@ -407,16 +432,47 @@ export function AdminDashboard() {
             <Loader className="mb-3 h-6 w-6 animate-spin text-white/40" />
             <p className="text-sm text-white/60">Loading complaints...</p>
           </div>
-        ) : filteredComplaints.length === 0 ? (
+        ) : sortedComplaints.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-white/10">
               <ClipboardList className="h-6 w-6 text-white/30" />
             </div>
             <p className="text-sm text-white/60">No complaints in this category</p>
           </div>
+        ) : showResolvedSection ? (
+          <div className="min-w-0 space-y-8">
+            <div className="space-y-3">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-white/45" style={{ fontWeight: 600 }}>
+                Open &amp; in progress
+              </p>
+              {activeSorted.map((complaint, index) => (
+                <ComplaintCard
+                  key={complaint.id}
+                  complaint={complaint}
+                  showAssignment
+                  showUser
+                  playIntroGlow={index === 0}
+                />
+              ))}
+            </div>
+            <div className="space-y-3 border-t border-white/10 pt-6">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-white/45" style={{ fontWeight: 600 }}>
+                Resolved
+              </p>
+              {resolvedSorted.map(complaint => (
+                <ComplaintCard
+                  key={complaint.id}
+                  complaint={complaint}
+                  showAssignment
+                  showUser
+                  playIntroGlow={false}
+                />
+              ))}
+            </div>
+          </div>
         ) : (
           <div className="min-w-0 space-y-3">
-            {filteredComplaints.map((complaint, index) => (
+            {sortedComplaints.map((complaint, index) => (
               <ComplaintCard
                 key={complaint.id}
                 complaint={complaint}

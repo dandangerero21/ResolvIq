@@ -2,9 +2,11 @@ import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { ComplaintCard } from '../shared/ComplaintCard';
+import { ComplaintSortSelect } from '../shared/ComplaintSortSelect';
 import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
 import { Complaint } from '../../types';
+import { sortComplaints, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
   ClipboardList,
   Clock,
@@ -16,7 +18,7 @@ import {
   History,
   Loader,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { cn } from '../ui/utils';
 
 type TabKey = 'active' | 'resolved' | 'cancelled';
@@ -28,6 +30,7 @@ export function StaffDashboard() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('active');
+  const [sortBy, setSortBy] = useState<ComplaintSortKey>('newest');
 
   useEffect(() => {
     const loadComplaints = async () => {
@@ -98,6 +101,8 @@ export function StaffDashboard() {
   ];
 
   const displayed = activeTab === 'active' ? active : activeTab === 'resolved' ? resolved : cancelledComplaints;
+
+  const sortedDisplayed = useMemo(() => sortComplaints(displayed, sortBy), [displayed, sortBy]);
 
   const firstName = currentUser?.name?.split(/\s+/)[0] || 'there';
 
@@ -208,8 +213,8 @@ export function StaffDashboard() {
                 </div>
               )}
 
-              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-white/[0.06] pb-3">
-                <div>
+              <div className="flex flex-col gap-3 border-b border-white/[0.06] pb-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                <div className="min-w-0">
                   <h2 className="text-white" style={{ fontWeight: 600 }}>
                     {activeTab === 'active'
                       ? 'Active cases'
@@ -218,12 +223,19 @@ export function StaffDashboard() {
                         : 'Cancelled cases'}
                   </h2>
                   <p className="mt-0.5 text-xs text-white/40">
-                    {displayed.length} case{displayed.length !== 1 ? 's' : ''} in this view
+                    {sortedDisplayed.length} case{sortedDisplayed.length !== 1 ? 's' : ''} in this view
                   </p>
                 </div>
+                <ComplaintSortSelect
+                  id="staff-complaint-sort"
+                  variant="staff"
+                  value={sortBy}
+                  onChange={setSortBy}
+                  className="sm:max-w-full"
+                />
               </div>
 
-              {displayed.length === 0 ? (
+              {sortedDisplayed.length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/15 bg-slate-950/35 py-20 text-center">
                   <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/25 bg-violet-950/40">
                     {activeTab === 'active' ? (
@@ -247,7 +259,7 @@ export function StaffDashboard() {
                 </div>
               ) : (
                 <ul className="space-y-4">
-                  {displayed.map((complaint, index) => (
+                  {sortedDisplayed.map((complaint, index) => (
                     <li key={complaint.id}>
                       <ComplaintCard
                         complaint={complaint}

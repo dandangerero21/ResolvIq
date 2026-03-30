@@ -2,9 +2,11 @@ import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { ComplaintCard } from '../shared/ComplaintCard';
+import { ComplaintSortSelect } from '../shared/ComplaintSortSelect';
 import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
 import { Complaint } from '../../types';
+import { sortComplaints, partitionActiveAndResolved, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
   Plus,
   ClipboardList,
@@ -13,7 +15,7 @@ import {
   AlertCircle,
   Sparkles,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { cn } from '../ui/utils';
 
 type TabKey = 'all' | 'open' | 'inprogress' | 'resolved';
@@ -31,6 +33,7 @@ export function UserDashboard() {
   const { complaints: contextComplaints } = useApp();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const [sortBy, setSortBy] = useState<ComplaintSortKey>('newest');
 
   useEffect(() => {
     if (!currentUser?.userId) return;
@@ -67,6 +70,19 @@ export function UserDashboard() {
         : activeTab === 'inprogress'
           ? inProgressComplaints
           : resolvedComplaints;
+
+  const sortedComplaints = useMemo(
+    () => sortComplaints(filteredComplaints, sortBy),
+    [filteredComplaints, sortBy]
+  );
+
+  const { active: activeSorted, resolved: resolvedSorted } = useMemo(
+    () => partitionActiveAndResolved(sortedComplaints),
+    [sortedComplaints]
+  );
+
+  const showResolvedSection =
+    activeTab === 'all' && activeSorted.length > 0 && resolvedSorted.length > 0;
 
   const tabCounts: Record<TabKey, number> = {
     all: userComplaints.length,
@@ -171,8 +187,8 @@ export function UserDashboard() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-white/[0.06] pb-3">
-            <div>
+          <div className="flex flex-col gap-3 border-b border-white/[0.06] pb-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+            <div className="min-w-0">
               <h2 className="text-white" style={{ fontWeight: 600 }}>
                 Your requests
               </h2>
@@ -182,9 +198,16 @@ export function UserDashboard() {
                   : `Showing ${filteredComplaints.length} of ${userComplaints.length}`}
               </p>
             </div>
+            <ComplaintSortSelect
+              id="user-complaint-sort"
+              variant="user"
+              value={sortBy}
+              onChange={setSortBy}
+              className="sm:max-w-full"
+            />
           </div>
 
-          {filteredComplaints.length === 0 ? (
+          {sortedComplaints.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-slate-950/30 py-20 text-center">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-500/20 bg-teal-950/30">
                 <ClipboardList className="h-6 w-6 text-teal-400/50" />
@@ -216,9 +239,46 @@ export function UserDashboard() {
                 </BorderGlow>
               )}
             </div>
+          ) : showResolvedSection ? (
+            <div className="space-y-8">
+              <div>
+                <p className="mb-4 text-[10px] uppercase tracking-[0.14em] text-teal-200/50" style={{ fontWeight: 600 }}>
+                  Open &amp; in progress
+                </p>
+                <ul className="space-y-4">
+                  {activeSorted.map((complaint, index) => (
+                    <li key={complaint.id}>
+                      <ComplaintCard
+                        complaint={complaint}
+                        variant="user"
+                        playIntroGlow={index === 0}
+                        onClick={() => navigate(`/user/complaint/${complaint.id}`)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="border-t border-white/[0.08] pt-6">
+                <p className="mb-4 text-[10px] uppercase tracking-[0.14em] text-teal-200/50" style={{ fontWeight: 600 }}>
+                  Resolved
+                </p>
+                <ul className="space-y-4">
+                  {resolvedSorted.map(complaint => (
+                    <li key={complaint.id}>
+                      <ComplaintCard
+                        complaint={complaint}
+                        variant="user"
+                        playIntroGlow={false}
+                        onClick={() => navigate(`/user/complaint/${complaint.id}`)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           ) : (
             <ul className="space-y-4">
-              {filteredComplaints.map((complaint, index) => (
+              {sortedComplaints.map((complaint, index) => (
                 <li key={complaint.id}>
                   <ComplaintCard
                     complaint={complaint}
