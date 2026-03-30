@@ -27,7 +27,6 @@
 		<url/>
 	</scm>
 	<properties>
-		<!-- Java 21: matches Docker/Render images; use JDK 21+ locally -->
 		<java.version>21</java.version>
 	</properties>
 	<dependencies>
