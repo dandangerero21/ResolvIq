@@ -108,16 +108,6 @@ export function Login() {
             <p className="text-white/60 text-sm">Sign in to your account to continue</p>
           </div>
 
-          {/* Test Credentials */}
-          <div className="mb-6 p-3 bg-white/5 backdrop-blur border border-white/10 rounded-lg">
-            <p className="text-xs font-semibold text-white/80 mb-2">Test Credentials:</p>
-            <p className="text-xs text-white/70">
-              <strong>Admin:</strong> admin@example.com / admin123
-            </p>
-            <p className="text-xs text-white/70 mt-1">
-              User accounts can sign in right away. Staff signups need admin approval first.
-            </p>
-          </div>
 
           {registeredBanner === 'user' && (
             <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
