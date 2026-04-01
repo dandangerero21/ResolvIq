@@ -2,18 +2,11 @@ import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { Message, Complaint } from '../../types';
 import { complaintCategoryLabel } from '../../utils/complaintCategoryLabel';
+import { StaffComplaintMobileSidebarPanel } from '../shared/ComplaintMobileSidebarPanels';
 import { ConversationThread } from '../shared/ConversationThread';
 import complaintService from '../../../services/complaintService';
 import messageService from '../../../services/messageService';
-import ratingService from '../../../services/ratingService';
-import {
-  ArrowLeft,
-  User,
-  Calendar,
-  Tag,
-  Lightbulb,
-  Star,
-} from 'lucide-react';
+import { ArrowLeft, Calendar, ChevronDown, Lightbulb, Star, Tag, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const statusConfig: Record<string, any> = {
@@ -174,8 +167,21 @@ export function StaffComplaintView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
-      {/* Header */}
-      <div className="shrink-0 border-b border-white/10 bg-black px-4 py-4 sm:px-8 sm:py-5">
+      {/* Mobile only: complaint metadata in-page (does not change global sidebar) */}
+      <div className="shrink-0 border-b border-white/10 bg-black md:hidden">
+        <details className="group px-4 py-2">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium text-white/90 [&::-webkit-details-marker]:hidden">
+            <span>Complaint details</span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-white/50 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="mt-3 pb-2">
+            <StaffComplaintMobileSidebarPanel complaint={complaint} />
+          </div>
+        </details>
+      </div>
+
+      {/* Header — tablet/desktop */}
+      <div className="hidden shrink-0 border-b border-white/10 bg-black px-4 py-4 sm:px-8 sm:py-5 md:block">
         <button
           onClick={() => navigate('/staff/dashboard')}
           className="flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-4 transition-colors"
@@ -226,9 +232,9 @@ export function StaffComplaintView() {
       </div>
 
       {/* Chat */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {/* Complaint Description */}
-        <div className="px-6 pt-4 pb-2 flex-shrink-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* Complaint Description — md+ only (mobile uses collapsible above thread) */}
+        <div className="hidden flex-shrink-0 px-6 pt-4 pb-2 md:block">
           <div className="bg-white/10 backdrop-blur border border-white/20 rounded-xl p-4">
             <div className="flex items-center gap-1.5 text-xs text-white/60 mb-1.5">
               <Tag className="w-3 h-3" />

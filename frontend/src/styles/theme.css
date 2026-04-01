@@ -130,7 +130,7 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply m-0 min-h-dvh bg-background text-foreground;
   }
 
   /**
@@ -139,7 +139,12 @@
   */
 
   html {
+    margin: 0;
     font-size: var(--font-size);
+  }
+
+  #root {
+    min-height: 100dvh;
   }
 
   h1 {

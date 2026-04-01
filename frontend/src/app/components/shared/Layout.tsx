@@ -60,7 +60,7 @@ function SidebarContent({
   const { currentUser } = useAuth();
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-white/10 px-5 py-5 md:px-6 md:py-6">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-red-600">
@@ -136,7 +136,7 @@ function SidebarContent({
           Sign out
         </button>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -159,7 +159,7 @@ export function Layout() {
   };
 
   return (
-    <div className="relative h-dvh min-h-0 overflow-hidden bg-black">
+    <div className="fixed inset-0 z-0 min-h-0 overflow-hidden bg-black">
       <div className="absolute inset-0 z-0">
         <DarkVeil hueShift={237} brightness={0.25} />
       </div>
@@ -178,7 +178,7 @@ export function Layout() {
           <span className="w-10" aria-hidden />
         </header>
 
-        <aside className="hidden h-full w-64 shrink-0 flex-col border-r border-white/10 bg-black md:flex">
+        <aside className="hidden h-full min-h-0 w-64 shrink-0 flex-col border-r border-white/10 bg-black md:flex">
           <SidebarContent
             role={role}
             navItems={navItems}

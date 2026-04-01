@@ -8,6 +8,7 @@ import messageService from '../../../services/messageService';
 import ratingService from '../../../services/ratingService';
 import { Complaint, Message } from '../../types';
 import { complaintCategoryLabel } from '../../utils/complaintCategoryLabel';
+import { UserComplaintMobileSidebarPanel } from '../shared/ComplaintMobileSidebarPanels';
 import {
   ArrowLeft,
   Star,
@@ -15,6 +16,7 @@ import {
   User,
   Calendar,
   Tag,
+  ChevronDown,
 } from 'lucide-react';
 
 const statusConfig: Record<string, any> = {
@@ -272,8 +274,23 @@ export function UserComplaintView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
-      {/* Header */}
-      <div className="shrink-0 border-b border-white/10 bg-black px-4 py-4 sm:px-8 sm:py-5">
+      {/* Mobile: in-page details (not global sidebar) — hidden while rating */}
+      {!showRating && (
+        <div className="shrink-0 border-b border-white/10 bg-black md:hidden">
+          <details className="group px-4 py-2">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium text-white/90 [&::-webkit-details-marker]:hidden">
+              <span>Complaint details</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-white/50 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-3 pb-2">
+              <UserComplaintMobileSidebarPanel complaint={complaint} />
+            </div>
+          </details>
+        </div>
+      )}
+
+      {/* Header — tablet/desktop */}
+      <div className="hidden shrink-0 border-b border-white/10 bg-black px-4 py-4 sm:px-8 sm:py-5 md:block">
         <button
           onClick={() => navigate('/user/dashboard')}
           className="flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-4 transition-colors"
@@ -390,8 +407,8 @@ export function UserComplaintView() {
       ) : (
         /* Chat Interface */
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* Original description as system note */}
-          <div className="px-6 pt-4 pb-2 flex-shrink-0">
+          {/* Original description — md+ (mobile: collapsible above) */}
+          <div className="hidden flex-shrink-0 px-6 pt-4 pb-2 md:block">
             <div className="bg-white/10 backdrop-blur border border-white/20 rounded-xl p-4 text-sm text-white/60 leading-relaxed">
               <div className="flex items-center gap-1.5 text-xs text-white/60 mb-1.5">
                 <Tag className="w-3 h-3" />
@@ -402,7 +419,7 @@ export function UserComplaintView() {
           </div>
 
           {(complaint.status === 'Open' || complaint.status === 'open') && (
-            <div className="px-6 pb-2 flex-shrink-0">
+            <div className="hidden flex-shrink-0 px-6 pb-2 md:block">
               <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
                 <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
                 <p className="text-red-600 text-xs">

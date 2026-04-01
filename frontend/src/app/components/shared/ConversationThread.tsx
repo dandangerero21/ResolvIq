@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useLayoutEffect, useRef, useCallback } from 'react';
 import { Message, Complaint } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { Send, CheckCircle2, Lock, Lightbulb, AlertCircle } from 'lucide-react';
@@ -36,18 +36,70 @@ export function ConversationThread({
   const [newMessage, setNewMessage] = useState('');
   const [markAsSolution, setMarkAsSolution] = useState(false);
   const [showEndConfirmation, setShowEndConfirmation] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const isUserNearBottomRef = useRef(true);
+  const pendingScrollFromOwnSendRef = useRef(false);
+  const didInitialScrollRef = useRef(false);
+  const prevComplaintKeyRef = useRef<string | number | undefined>(undefined);
+
+  const NEAR_BOTTOM_PX = 120;
+  const complaintKey = complaint.complaintId ?? complaint.id ?? '';
+
+  const updateNearBottomFromScroll = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isUserNearBottomRef.current = dist < NEAR_BOTTOM_PX;
+  }, []);
+
+  /** Scroll only the messages pane — never `scrollIntoView`, which also scrolls the window and fights `position: fixed` shells. */
+  const scrollMessagesPaneToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const top = el.scrollHeight;
+    if (behavior === 'smooth') {
+      el.scrollTo({ top, behavior: 'smooth' });
+    } else {
+      el.scrollTop = top;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+
+    if (complaintKey !== prevComplaintKeyRef.current) {
+      prevComplaintKeyRef.current = complaintKey;
+      didInitialScrollRef.current = false;
+      isUserNearBottomRef.current = true;
+    }
+
+    if (pendingScrollFromOwnSendRef.current) {
+      pendingScrollFromOwnSendRef.current = false;
+      scrollMessagesPaneToBottom('smooth');
+      isUserNearBottomRef.current = true;
+      return;
+    }
+
+    if (!didInitialScrollRef.current && messages.length > 0) {
+      didInitialScrollRef.current = true;
+      scrollMessagesPaneToBottom('auto');
+      isUserNearBottomRef.current = true;
+      return;
+    }
+
+    if (isUserNearBottomRef.current) {
+      scrollMessagesPaneToBottom('auto');
+    }
+  }, [messages, complaintKey, scrollMessagesPaneToBottom]);
+
   const isResolved = complaint.status === 'Resolved';
   const isCancelled = complaint.status === 'Cancelled';
   const isClosed = complaint.status === 'Resolved' || isConversationEnded;
 
-  // Check if there's a solution proposal message
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
   const handleSend = () => {
     if (!newMessage.trim()) return;
+    pendingScrollFromOwnSendRef.current = true;
     onSendMessage(newMessage.trim(), markAsSolution);
     setNewMessage('');
     setMarkAsSolution(false);
@@ -89,7 +141,11 @@ export function ConversationThread({
   return (
     <div className="flex min-h-0 h-full flex-col bg-black">
       {/* Messages Area */}
-      <div className="min-h-0 flex-1 overflow-y-auto space-y-6 bg-black p-4 sm:p-6">
+      <div
+        ref={messagesScrollRef}
+        onScroll={updateNearBottomFromScroll}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-6 bg-black p-4 sm:p-6"
+      >
         {grouped.map(group => (
           <div key={group.date}>
             {/* Date Divider */}
@@ -190,8 +246,6 @@ export function ConversationThread({
             <p className="text-xs mt-1">Start the conversation below</p>
           </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Solution Proposal Banner (User Side) - Only show if solution not yet responded to */}
