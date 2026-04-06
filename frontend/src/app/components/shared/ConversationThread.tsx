@@ -348,7 +348,7 @@ export function ConversationThread({
 
           {/* End Conversation Button */}
           {!isConversationEnded && (
-            <div className="flex items-center mb-3 border-t border-white/10 pt-3">
+            <div className="mb-3 flex items-center">
               <button
                 onClick={() => setShowEndConfirmation(true)}
                 className={cn(
@@ -365,7 +365,7 @@ export function ConversationThread({
             </div>
           )}
 
-          <div className="flex gap-3 items-end">
+          <div className="flex items-center gap-3">
             <div className="flex-1 relative">
               <textarea
                 value={newMessage}
