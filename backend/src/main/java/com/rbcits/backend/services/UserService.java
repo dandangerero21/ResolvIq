@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import com.rbcits.backend.DTOs.PasswordResetCompleteDTO;
 import com.rbcits.backend.DTOs.PasswordResetRequestDTO;
 import com.rbcits.backend.repositories.UserRepository;
@@ -109,6 +110,7 @@ public class UserService {
                 .toList();
     }
 
+    @Transactional
     public SimpleMessageResponse requestPasswordReset(PasswordResetRequestDTO request) {
         String email = request == null ? null : request.email();
         if (email == null || email.isBlank()) {
@@ -145,6 +147,7 @@ public class UserService {
         return new SimpleMessageResponse("Password reset link is valid.");
     }
 
+    @Transactional
     public SimpleMessageResponse completePasswordReset(PasswordResetCompleteDTO request) {
         String tokenValue = request == null ? null : request.token();
         String newPassword = request == null ? null : request.newPassword();
