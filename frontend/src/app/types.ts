@@ -60,6 +60,7 @@ export interface Complaint {
   updatedAt?: Date;
   resolvedAt?: Date;
   rating?: number;
+  ratingFeedback?: string;
   messages?: Message[];
   assignment?: Assignment;
 }

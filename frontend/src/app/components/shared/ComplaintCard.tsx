@@ -9,6 +9,7 @@ interface ComplaintCardProps {
   onClick?: () => void;
   showAssignment?: boolean;
   showUser?: boolean;
+  unreadMessageCount?: number;
   /** user = teal personal tracker; staff = amber/violet workbench; default = admin list */
   variant?: 'default' | 'user' | 'staff';
   /** One-shot border sweep on mount (use only for the first card in a list) */
@@ -51,6 +52,18 @@ const statusConfig: Record<string, any> = {
     label: 'Resolved',
     className: 'bg-white/10 text-white/60 border border-white/20',
     dot: 'bg-white/40',
+  },
+  'cancelled': {
+    icon: XCircle,
+    label: 'Cancelled',
+    className: 'bg-red-50 text-red-500 border border-red-100',
+    dot: 'bg-red-300',
+  },
+  'Cancelled': {
+    icon: XCircle,
+    label: 'Cancelled',
+    className: 'bg-red-50 text-red-500 border border-red-100',
+    dot: 'bg-red-300',
   },
 };
 
@@ -165,6 +178,7 @@ export function ComplaintCard({
   onClick,
   showAssignment = false,
   showUser = false,
+  unreadMessageCount = 0,
   variant = 'default',
   playIntroGlow = false,
 }: ComplaintCardProps) {
@@ -254,8 +268,18 @@ export function ComplaintCard({
             </h3>
             <p className="mt-0.5 line-clamp-2 text-sm leading-relaxed text-white/60">{complaint.description}</p>
           </div>
-
-          {interactive && <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-white/40" />}
+          <div className="mt-1 flex flex-shrink-0 items-center gap-2">
+            {unreadMessageCount > 0 && (
+              <span
+                aria-label={`${unreadMessageCount} unread message${unreadMessageCount > 1 ? 's' : ''}`}
+                className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] text-white"
+                style={{ fontWeight: 700 }}
+              >
+                {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+              </span>
+            )}
+            {interactive && <ChevronRight className="h-4 w-4 text-white/40" />}
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-3">

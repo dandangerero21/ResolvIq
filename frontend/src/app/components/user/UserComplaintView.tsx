@@ -5,9 +5,15 @@ import { useApp } from '../../context/AppContext';
 import { ConversationThread } from '../shared/ConversationThread';
 import complaintService from '../../../services/complaintService';
 import messageService from '../../../services/messageService';
+import { markConversationAsRead } from '../../../services/conversationUnreadService';
 import ratingService from '../../../services/ratingService';
 import { Complaint, Message } from '../../types';
 import { complaintCategoryLabel } from '../../utils/complaintCategoryLabel';
+import {
+  getLatestStaffSolutionProposal,
+  getMessageNumericId,
+  hasAcceptedSolution,
+} from '../../utils/solutionWorkflow';
 import { UserComplaintMobileSidebarPanel } from '../shared/ComplaintMobileSidebarPanels';
 import {
   ArrowLeft,
@@ -30,6 +36,11 @@ const statusConfig: Record<string, any> = {
   'Cancelled': { label: 'Cancelled', className: 'bg-red-50 text-red-500 border border-red-100', dot: 'bg-red-400' },
 };
 
+const isClosedConversationStatus = (status?: string): boolean => {
+  const normalizedStatus = status?.toLowerCase();
+  return normalizedStatus === 'resolved' || normalizedStatus === 'cancelled';
+};
+
 export function UserComplaintView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -38,7 +49,6 @@ export function UserComplaintView() {
 
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [showRating, setShowRating] = useState(false);
   const [rating, setRating] = useState(0);
   const [ratingFeedback, setRatingFeedback] = useState('');
@@ -49,7 +59,8 @@ export function UserComplaintView() {
   const [solutionAccepted, setSolutionAccepted] = useState(false);
   const [dismissedSolutionId, setDismissedSolutionId] = useState<number | null>(null);
   const [hasSubmittedRating, setHasSubmittedRating] = useState(false);
-  const [pollInterval, setPollInterval] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [hasCheckedExistingRating, setHasCheckedExistingRating] = useState(false);
+  const isSolutionAccepted = solutionAccepted || hasAcceptedSolution(messages);
 
   // Fetch complaint from backend
   useEffect(() => {
@@ -59,12 +70,15 @@ export function UserComplaintView() {
         if (id) {
           const backendComplaint = await complaintService.getComplaintById(Number(id));
           setComplaint(backendComplaint);
-          const resolved =
-            backendComplaint.status === 'resolved' || backendComplaint.status === 'Resolved';
-          if (resolved && backendComplaint.complaintId) {
+          const isClosed = isClosedConversationStatus(backendComplaint.status);
+          if (isClosed && backendComplaint.complaintId) {
             setIsConversationEnded(true);
-            const key = `complaint-ended-by-${backendComplaint.complaintId}`;
-            setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+            if (backendComplaint.status?.toLowerCase() === 'cancelled') {
+              setConversationEndedBy('staff');
+            } else {
+              const key = `complaint-ended-by-${backendComplaint.complaintId}`;
+              setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+            }
           }
         }
       } catch (error) {
@@ -76,16 +90,19 @@ export function UserComplaintView() {
         );
         setComplaint(contextComplaint || null);
         if (contextComplaint?.complaintId) {
-          const resolved =
-            contextComplaint.status === 'resolved' || contextComplaint.status === 'Resolved';
-          if (resolved) {
+          const isClosed = isClosedConversationStatus(contextComplaint.status);
+          if (isClosed) {
             setIsConversationEnded(true);
-            const key = `complaint-ended-by-${contextComplaint.complaintId}`;
-            setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+            if (contextComplaint.status?.toLowerCase() === 'cancelled') {
+              setConversationEndedBy('staff');
+            } else {
+              const key = `complaint-ended-by-${contextComplaint.complaintId}`;
+              setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+            }
           }
         }
       } finally {
-        setIsLoading(false);
+        // No UI loader is shown in this view; complaint null-state handles failures.
       }
     };
     
@@ -95,23 +112,38 @@ export function UserComplaintView() {
   // Fetch messages from backend and set up polling
   useEffect(() => {
     if (!complaint?.complaintId) return;
+    const complaintId = complaint.complaintId;
 
     const fetchData = async () => {
       try {
         // Fetch messages and complaint status
-        const backendMessages = await messageService.getComplaintMessages(complaint.complaintId!);
+        const backendMessages = await messageService.getComplaintMessages(complaintId);
         setMessages(backendMessages);
+
+        const viewerUserId = Number(currentUser?.userId ?? currentUser?.id)
+        if (Number.isFinite(viewerUserId)) {
+          markConversationAsRead({
+            complaintId,
+            viewerRole: 'user',
+            viewerUserId,
+            messages: backendMessages,
+          })
+        }
         
         // Try to fetch updated complaint status
         try {
-          const updatedComplaint = await complaintService.getComplaintById(complaint.complaintId!);
+          const updatedComplaint = await complaintService.getComplaintById(complaintId);
           setComplaint(updatedComplaint);
           
-          // Resolved on the server — attribute to user only if they used "End conversation" (see sessionStorage).
-          if ((updatedComplaint.status === 'resolved' || updatedComplaint.status === 'Resolved') && !isConversationEnded) {
+          // Closed on the server — attribute to user only if they used "End conversation" (see sessionStorage).
+          if (isClosedConversationStatus(updatedComplaint.status) && !isConversationEnded) {
             setIsConversationEnded(true);
-            const key = `complaint-ended-by-${complaint.complaintId}`;
-            setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+            if (updatedComplaint.status?.toLowerCase() === 'cancelled') {
+              setConversationEndedBy('staff');
+            } else {
+              const key = `complaint-ended-by-${complaintId}`;
+              setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+            }
           }
         } catch (complaintError) {
           // Log but don't crash - complaint might not exist in backend yet
@@ -127,39 +159,89 @@ export function UserComplaintView() {
 
     // Set up polling every 2 seconds
     const interval = setInterval(fetchData, 2000);
-    setPollInterval(interval);
 
     return () => clearInterval(interval);
-  }, [complaint?.complaintId, isConversationEnded]);
+  }, [complaint?.complaintId, isConversationEnded, currentUser?.userId, currentUser?.id]);
 
   // This effect is no longer needed - we don't use the solution dialog anymore
 
   // Show rating screen when conversation is ended by the other party
   useEffect(() => {
+    if (!hasCheckedExistingRating) {
+      return;
+    }
+
     if (isConversationEnded && !showRating && !hasSubmittedRating) {
       setShowRating(true);
     }
-  }, [isConversationEnded, showRating, hasSubmittedRating]);
+  }, [isConversationEnded, showRating, hasSubmittedRating, hasCheckedExistingRating]);
 
   // Check if complaint already has a rating (user already rated it)
   useEffect(() => {
-    if (complaint?.rating) {
-      setHasSubmittedRating(true);
+    if (!complaint?.complaintId) {
+      setHasCheckedExistingRating(false);
+      return;
     }
-  }, [complaint?.rating]);
+
+    setHasCheckedExistingRating(false);
+
+    if (typeof complaint.rating === 'number' && complaint.rating > 0) {
+      setHasSubmittedRating(true);
+      setShowRating(false);
+      setHasCheckedExistingRating(true);
+      return;
+    }
+
+    setHasSubmittedRating(false);
+
+    let cancelled = false;
+
+    const checkExistingRating = async () => {
+      try {
+        const existingRating = await ratingService.getRatingByComplaintId(complaint.complaintId!);
+        if (!cancelled && existingRating?.ratingId) {
+          setHasSubmittedRating(true);
+          setShowRating(false);
+        }
+      } catch (error) {
+        const response = (error as { response?: { status?: number; data?: { message?: string } } }).response;
+        const status = response?.status;
+        const message = response?.data?.message?.toLowerCase() ?? '';
+
+        // Backend returns 400 with this message when no rating exists yet.
+        const isNoRatingCase = status === 404 || (status === 400 && message.includes('no rating found'));
+        if (!isNoRatingCase) {
+          console.error('Failed to verify existing rating:', error);
+        }
+
+        if (!cancelled && isNoRatingCase) {
+          setHasSubmittedRating(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setHasCheckedExistingRating(true);
+        }
+      }
+    };
+
+    void checkExistingRating();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [complaint?.complaintId]);
 
   // Check if a new solution was proposed after user dismissed the previous one
   useEffect(() => {
-    if (dismissedSolutionId !== null && solutionAccepted === false) {
-      // Find the LATEST solution (last one in the array since messages are ordered by timestamp)
-      const allSolutions = messages.filter(m => m.isSolutionProposal && m.senderRole === 'staff');
-      const latestSolution = allSolutions[allSolutions.length - 1];
-      if (latestSolution && latestSolution.messageId && latestSolution.messageId !== dismissedSolutionId) {
+    if (dismissedSolutionId !== null && !isSolutionAccepted) {
+      const latestSolution = getLatestStaffSolutionProposal(messages);
+      const latestSolutionId = latestSolution ? getMessageNumericId(latestSolution) : null;
+      if (latestSolutionId !== null && latestSolutionId !== dismissedSolutionId) {
         // New solution was proposed, allow banner to appear again
         setDismissedSolutionId(null);
       }
     }
-  }, [messages, dismissedSolutionId, solutionAccepted]);
+  }, [messages, dismissedSolutionId, isSolutionAccepted]);
 
   const handleSolutionAccepted = () => {
     if (complaint?.complaintId) {
@@ -174,11 +256,10 @@ export function UserComplaintView() {
   };
 
   const handleSolutionRejected = () => {
-    // Find the LATEST solution (last one in the array since messages are ordered by timestamp)
-    const allSolutions = messages.filter(m => m.isSolutionProposal && m.senderRole === 'staff');
-    const latestSolution = allSolutions[allSolutions.length - 1];
-    if (latestSolution?.messageId && complaint?.complaintId) {
-      setDismissedSolutionId(latestSolution.messageId);
+    const latestSolution = getLatestStaffSolutionProposal(messages);
+    const latestSolutionId = latestSolution ? getMessageNumericId(latestSolution) : null;
+    if (latestSolutionId !== null && complaint?.complaintId) {
+      setDismissedSolutionId(latestSolutionId);
       
       // Send system message to backend to inform staff
       messageService.rejectSolution(complaint.complaintId).catch(error => {
@@ -238,6 +319,7 @@ export function UserComplaintView() {
           resolveComplaint(complaint.id, rating);
         }
         setHasSubmittedRating(true);
+        setHasCheckedExistingRating(true);
         setShowRating(false);
         setRatingFeedback('');
       } catch (error) {
@@ -250,8 +332,9 @@ export function UserComplaintView() {
   const handleEndConversation = async () => {
     if (!complaint?.complaintId) return;
     try {
-      // Update complaint status to resolved
-      await complaintService.updateComplaintStatus(complaint.complaintId, 'resolved');
+      // End Conversation should always be treated as cancelled.
+      await complaintService.updateComplaintStatus(complaint.complaintId, 'cancelled');
+      setComplaint(prev => (prev ? { ...prev, status: 'cancelled' } : prev));
       sessionStorage.setItem(`complaint-ended-by-${complaint.complaintId}`, 'user');
       setConversationEndedBy('user');
       setIsConversationEnded(true);
@@ -346,7 +429,7 @@ export function UserComplaintView() {
             <p className="text-white/60 text-sm mb-6 leading-relaxed">
               How satisfied are you with how{' '}
               <span className="text-white" style={{ fontWeight: 500 }}>{complaint.assignedStaffName}</span>{" "}
-              resolved your complaint?
+              handled your complaint?
             </p>
 
             <div className="flex justify-center gap-3 mb-6">
@@ -439,7 +522,7 @@ export function UserComplaintView() {
               onSolutionRejected={handleSolutionRejected}
               isConversationEnded={isConversationEnded}
               conversationEndedBy={conversationEndedBy}
-              solutionAccepted={solutionAccepted}
+              solutionAccepted={isSolutionAccepted}
               dismissedSolutionId={dismissedSolutionId}
             />
           </div>

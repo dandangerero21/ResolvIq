@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import { Login } from './components/auth/Login';
 import { Signup } from './components/auth/Signup';
+import { ResetPasswordConfirm } from './components/auth/ResetPasswordConfirm';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/shared/Layout';
 import { UserDashboard } from './components/user/UserDashboard';
@@ -26,6 +27,10 @@ export const router = createBrowserRouter([
   {
     path: '/signup',
     element: <Signup />,
+  },
+  {
+    path: '/reset-password/confirm',
+    element: <ResetPasswordConfirm />,
   },
   // User routes
   {

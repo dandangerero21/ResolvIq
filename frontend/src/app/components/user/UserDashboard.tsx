@@ -5,26 +5,27 @@ import { ComplaintCard } from '../shared/ComplaintCard';
 import { ComplaintSortSelect } from '../shared/ComplaintSortSelect';
 import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
+import messageService from '../../../services/messageService';
+import { getConversationUnreadCount } from '../../../services/conversationUnreadService';
 import { Complaint } from '../../types';
-import { sortComplaints, partitionActiveAndResolved, type ComplaintSortKey } from '../../utils/complaintSort';
+import { sortComplaints, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
   Plus,
   ClipboardList,
   Clock,
-  CheckCircle2,
-  AlertCircle,
   Sparkles,
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '../ui/utils';
 
-type TabKey = 'all' | 'open' | 'inprogress' | 'resolved';
+type TabKey = 'all' | 'open' | 'inprogress' | 'resolved' | 'cancelled';
 
 const tabs: { key: TabKey; label: string; short: string }[] = [
   { key: 'all', label: 'All', short: 'All' },
   { key: 'open', label: 'Pending', short: 'Pending' },
   { key: 'inprogress', label: 'In progress', short: 'Active' },
   { key: 'resolved', label: 'Resolved', short: 'Done' },
+  { key: 'cancelled', label: 'Cancelled', short: 'Cancelled' },
 ];
 
 export function UserDashboard() {
@@ -34,13 +35,18 @@ export function UserDashboard() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [sortBy, setSortBy] = useState<ComplaintSortKey>('newest');
+  const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
+  const viewerUserId = useMemo(
+    () => Number(currentUser?.userId ?? currentUser?.id),
+    [currentUser?.userId, currentUser?.id]
+  );
 
   useEffect(() => {
-    if (!currentUser?.userId) return;
+    if (!Number.isFinite(viewerUserId)) return;
 
     const loadComplaints = async () => {
       try {
-        const backendComplaints = await complaintService.getUserComplaints(currentUser.userId!);
+        const backendComplaints = await complaintService.getUserComplaints(viewerUserId);
         setComplaints(backendComplaints);
       } catch (error) {
         console.error('Failed to load complaints:', error);
@@ -49,18 +55,129 @@ export function UserDashboard() {
     };
 
     loadComplaints();
-  }, [currentUser?.userId]);
+  }, [viewerUserId]);
 
-  const userComplaints = complaints.length > 0 ? complaints : contextComplaints.filter(c =>
-    (c.createdById === currentUser?.userId ||
-      c.createdById?.toString() === currentUser?.id ||
-      c.userId === currentUser?.id) &&
-    c.status !== 'Cancelled' &&
-    c.status !== 'cancelled'
+  const userComplaints = useMemo(
+    () =>
+      complaints.length > 0
+        ? complaints
+        : contextComplaints.filter(
+            c =>
+              c.createdById === currentUser?.userId ||
+              c.createdById?.toString() === currentUser?.id ||
+              c.userId === currentUser?.id
+          ),
+    [complaints, contextComplaints, currentUser?.userId, currentUser?.id]
   );
-  const openComplaints = userComplaints.filter(c => c.status === 'open' || c.status === 'Open');
-  const inProgressComplaints = userComplaints.filter(c => c.status === 'assigned' || c.status === 'In Progress');
-  const resolvedComplaints = userComplaints.filter(c => c.status === 'resolved' || c.status === 'Resolved');
+
+  const complaintIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          userComplaints
+            .map(complaint => complaint.complaintId ?? Number(complaint.id))
+            .filter((complaintId): complaintId is number => Number.isFinite(complaintId))
+        )
+      ),
+    [userComplaints]
+  );
+
+  const complaintRouteId = (complaint: Complaint): string | null => {
+    if (complaint.id) {
+      return complaint.id;
+    }
+    if (typeof complaint.complaintId === 'number' && Number.isFinite(complaint.complaintId)) {
+      return String(complaint.complaintId);
+    }
+    return null;
+  };
+
+  const handleOpenComplaint = (complaint: Complaint) => {
+    const routeId = complaintRouteId(complaint);
+    if (!routeId) {
+      console.warn('Cannot open complaint: missing route identifier', complaint);
+      return;
+    }
+    navigate(`/user/complaint/${routeId}`);
+  };
+
+  useEffect(() => {
+    if (!Number.isFinite(viewerUserId)) {
+      setUnreadCounts({})
+      return
+    }
+
+    if (complaintIds.length === 0) {
+      setUnreadCounts({})
+      return
+    }
+
+    let isMounted = true
+
+    const refreshUnreadCounts = async () => {
+      const unreadEntries = await Promise.all(
+        complaintIds.map(async complaintId => {
+          try {
+            const messages = await messageService.getComplaintMessages(complaintId)
+            const unreadCount = getConversationUnreadCount({
+              complaintId,
+              viewerRole: 'user',
+              viewerUserId,
+              messages,
+            })
+            return [complaintId, unreadCount] as const
+          } catch (error) {
+            console.error(`Failed to load unread count for complaint ${complaintId}:`, error)
+            return [complaintId, 0] as const
+          }
+        })
+      )
+
+      if (!isMounted) {
+        return
+      }
+
+      setUnreadCounts(Object.fromEntries(unreadEntries))
+    }
+
+    void refreshUnreadCounts()
+    const interval = setInterval(() => {
+      void refreshUnreadCounts()
+    }, 4000)
+
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [viewerUserId, complaintIds])
+
+  const openComplaints = useMemo(
+    () => userComplaints.filter(c => c.status === 'open' || c.status === 'Open'),
+    [userComplaints]
+  );
+  const inProgressComplaints = useMemo(
+    () => userComplaints.filter(c => c.status === 'assigned' || c.status === 'In Progress'),
+    [userComplaints]
+  );
+  const resolvedComplaints = useMemo(
+    () => userComplaints.filter(c => c.status === 'resolved' || c.status === 'Resolved'),
+    [userComplaints]
+  );
+  const cancelledComplaints = useMemo(
+    () => userComplaints.filter(c => c.status === 'cancelled' || c.status === 'Cancelled'),
+    [userComplaints]
+  );
+  const activeComplaints = useMemo(
+    () =>
+      userComplaints.filter(
+        c =>
+          c.status !== 'resolved' &&
+          c.status !== 'Resolved' &&
+          c.status !== 'cancelled' &&
+          c.status !== 'Cancelled'
+      ),
+    [userComplaints]
+  );
 
   const filteredComplaints =
     activeTab === 'all'
@@ -69,26 +186,24 @@ export function UserDashboard() {
         ? openComplaints
         : activeTab === 'inprogress'
           ? inProgressComplaints
-          : resolvedComplaints;
+          : activeTab === 'resolved'
+            ? resolvedComplaints
+            : cancelledComplaints;
 
   const sortedComplaints = useMemo(
     () => sortComplaints(filteredComplaints, sortBy),
     [filteredComplaints, sortBy]
   );
-
-  const { active: activeSorted, resolved: resolvedSorted } = useMemo(
-    () => partitionActiveAndResolved(sortedComplaints),
-    [sortedComplaints]
-  );
-
-  const showResolvedSection =
-    activeTab === 'all' && activeSorted.length > 0 && resolvedSorted.length > 0;
+  const activeSorted = useMemo(() => sortComplaints(activeComplaints, sortBy), [activeComplaints, sortBy]);
+  const resolvedSorted = useMemo(() => sortComplaints(resolvedComplaints, sortBy), [resolvedComplaints, sortBy]);
+  const cancelledSorted = useMemo(() => sortComplaints(cancelledComplaints, sortBy), [cancelledComplaints, sortBy]);
 
   const tabCounts: Record<TabKey, number> = {
     all: userComplaints.length,
     open: openComplaints.length,
     inprogress: inProgressComplaints.length,
     resolved: resolvedComplaints.length,
+    cancelled: cancelledComplaints.length,
   };
 
   const firstName = currentUser?.name?.split(/\s+/)[0] || 'there';
@@ -239,42 +354,70 @@ export function UserDashboard() {
                 </BorderGlow>
               )}
             </div>
-          ) : showResolvedSection ? (
+          ) : activeTab === 'all' ? (
             <div className="space-y-8">
-              <div>
-                <p className="mb-4 text-[10px] uppercase tracking-[0.14em] text-teal-200/50" style={{ fontWeight: 600 }}>
-                  Open &amp; in progress
-                </p>
-                <ul className="space-y-4">
-                  {activeSorted.map((complaint, index) => (
-                    <li key={complaint.id}>
-                      <ComplaintCard
-                        complaint={complaint}
-                        variant="user"
-                        playIntroGlow={index === 0}
-                        onClick={() => navigate(`/user/complaint/${complaint.id}`)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="border-t border-white/[0.08] pt-6">
-                <p className="mb-4 text-[10px] uppercase tracking-[0.14em] text-teal-200/50" style={{ fontWeight: 600 }}>
-                  Resolved
-                </p>
-                <ul className="space-y-4">
-                  {resolvedSorted.map(complaint => (
-                    <li key={complaint.id}>
-                      <ComplaintCard
-                        complaint={complaint}
-                        variant="user"
-                        playIntroGlow={false}
-                        onClick={() => navigate(`/user/complaint/${complaint.id}`)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {activeSorted.length > 0 && (
+                <div>
+                  <p className="mb-4 text-[10px] uppercase tracking-[0.14em] text-teal-200/50" style={{ fontWeight: 600 }}>
+                    Open &amp; in progress
+                  </p>
+                  <ul className="space-y-4">
+                    {activeSorted.map((complaint, index) => (
+                      <li key={complaint.id}>
+                        <ComplaintCard
+                          complaint={complaint}
+                          variant="user"
+                          unreadMessageCount={unreadCounts[complaint.complaintId ?? Number(complaint.id)] ?? 0}
+                          playIntroGlow={index === 0}
+                          onClick={() => handleOpenComplaint(complaint)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {resolvedSorted.length > 0 && (
+                <div className="border-t border-white/[0.08] pt-6">
+                  <p className="mb-4 text-[10px] uppercase tracking-[0.14em] text-teal-200/50" style={{ fontWeight: 600 }}>
+                    Resolved
+                  </p>
+                  <ul className="space-y-4">
+                    {resolvedSorted.map(complaint => (
+                      <li key={complaint.id}>
+                        <ComplaintCard
+                          complaint={complaint}
+                          variant="user"
+                          unreadMessageCount={unreadCounts[complaint.complaintId ?? Number(complaint.id)] ?? 0}
+                          playIntroGlow={false}
+                          onClick={() => handleOpenComplaint(complaint)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {cancelledSorted.length > 0 && (
+                <div className="border-t border-white/[0.08] pt-6">
+                  <p className="mb-4 text-[10px] uppercase tracking-[0.14em] text-teal-200/50" style={{ fontWeight: 600 }}>
+                    Cancelled
+                  </p>
+                  <ul className="space-y-4">
+                    {cancelledSorted.map(complaint => (
+                      <li key={complaint.id}>
+                        <ComplaintCard
+                          complaint={complaint}
+                          variant="user"
+                          unreadMessageCount={unreadCounts[complaint.complaintId ?? Number(complaint.id)] ?? 0}
+                          playIntroGlow={false}
+                          onClick={() => handleOpenComplaint(complaint)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ) : (
             <ul className="space-y-4">
@@ -283,8 +426,9 @@ export function UserDashboard() {
                   <ComplaintCard
                     complaint={complaint}
                     variant="user"
+                    unreadMessageCount={unreadCounts[complaint.complaintId ?? Number(complaint.id)] ?? 0}
                     playIntroGlow={index === 0}
-                    onClick={() => navigate(`/user/complaint/${complaint.id}`)}
+                    onClick={() => handleOpenComplaint(complaint)}
                   />
                 </li>
               ))}

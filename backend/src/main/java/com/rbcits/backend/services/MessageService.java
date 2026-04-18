@@ -38,6 +38,19 @@ public class MessageService {
         User sender = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+        if (isSolutionProposal) {
+            if (sender.getRole() == null || !sender.getRole().equalsIgnoreCase("staff")) {
+                throw new IllegalArgumentException("Only staff members can send solution proposals.");
+            }
+            if (isClosedComplaintStatus(complaint.getStatus())) {
+                throw new IllegalArgumentException("Cannot send a solution proposal for a closed complaint.");
+            }
+            if (hasAcceptedSolution(complaint)) {
+                throw new IllegalArgumentException(
+                        "A solution has already been accepted. Mark the complaint as solved instead of sending another proposal.");
+            }
+        }
+
         Message message = new Message();
         message.setComplaint(complaint);
         message.setSender(sender);
@@ -105,5 +118,17 @@ public class MessageService {
             message.getSender() != null ? message.getSender().getName() : null,
             message.getSender() != null ? message.getSender().getRole() : null
         );
+    }
+
+    private boolean hasAcceptedSolution(Complaint complaint) {
+        return messageRepository.existsByComplaintAndIsSystemMessageTrueAndContentContainingIgnoreCase(complaint, "accepted");
+    }
+
+    private boolean isClosedComplaintStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+
+        return status.equalsIgnoreCase("resolved") || status.equalsIgnoreCase("cancelled");
     }
 }

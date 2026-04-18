@@ -1,8 +1,9 @@
-import { useState, useLayoutEffect, useRef, useCallback } from 'react';
+import { useState, useLayoutEffect, useRef, useCallback, useEffect } from 'react';
 import { Message, Complaint } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { Send, CheckCircle2, Lock, Lightbulb, AlertCircle } from 'lucide-react';
 import { cn } from '../ui/utils';
+import { isAcceptedSystemMessage } from '../../utils/solutionWorkflow';
 
 interface ConversationThreadProps {
   complaint: Complaint;
@@ -28,13 +29,13 @@ export function ConversationThread({
   onSolutionRejected,
   isStaff = false,
   isConversationEnded = false,
-  conversationEndedBy = 'staff',
   solutionAccepted = false,
   dismissedSolutionId = null,
 }: ConversationThreadProps) {
   const { currentUser } = useAuth();
   const [newMessage, setNewMessage] = useState('');
   const [markAsSolution, setMarkAsSolution] = useState(false);
+  const [showSolutionAcceptanceConfirmation, setShowSolutionAcceptanceConfirmation] = useState(false);
   const [showEndConfirmation, setShowEndConfirmation] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const isUserNearBottomRef = useRef(true);
@@ -93,14 +94,22 @@ export function ConversationThread({
     }
   }, [messages, complaintKey, scrollMessagesPaneToBottom]);
 
-  const isResolved = complaint.status === 'Resolved';
-  const isCancelled = complaint.status === 'Cancelled';
-  const isClosed = complaint.status === 'Resolved' || isConversationEnded;
+  const statusValue = complaint.status?.toLowerCase();
+  const isResolved = statusValue === 'resolved';
+  const isCancelled = statusValue === 'cancelled';
+  const isClosed = isResolved || isCancelled || isConversationEnded;
+
+  useEffect(() => {
+    if (solutionAccepted && markAsSolution) {
+      setMarkAsSolution(false);
+    }
+  }, [solutionAccepted, markAsSolution]);
 
   const handleSend = () => {
     if (!newMessage.trim()) return;
     pendingScrollFromOwnSendRef.current = true;
-    onSendMessage(newMessage.trim(), markAsSolution);
+    const canSendAsProposal = isStaff && !solutionAccepted && markAsSolution;
+    onSendMessage(newMessage.trim(), canSendAsProposal);
     setNewMessage('');
     setMarkAsSolution(false);
   };
@@ -160,23 +169,46 @@ export function ConversationThread({
               {group.messages.map(message => {
                 // Check if this is a system message
                 if (message.isSystemMessage) {
-                  const isAccepted = message.content?.includes('accepted');
+                  const isAccepted = isAcceptedSystemMessage(message);
+                  const systemTitle = isAccepted ? 'Solution Accepted' : "Solution didn't work";
+                  const systemContent = message.content?.trim() ?? '';
+                  const hasDistinctSystemContent =
+                    systemContent.length > 0 &&
+                    systemContent.toLowerCase() !== systemTitle.toLowerCase();
+                  const fallbackRejectedContent = isStaff
+                    ? 'The customer said this proposal did not resolve the issue.'
+                    : 'Thanks for the feedback. Please wait for another proposed fix.';
+                  const fallbackAcceptedContent = isStaff
+                    ? 'The customer accepted your proposed solution!'
+                    : 'You accepted the proposed solution!';
+                  const rawResolvedSystemContent = hasDistinctSystemContent
+                    ? systemContent
+                    : isAccepted
+                      ? fallbackAcceptedContent
+                      : fallbackRejectedContent;
+                  const resolvedSystemContent = isAccepted
+                    ? rawResolvedSystemContent.replace(/[.]+$/, '').concat('!')
+                    : rawResolvedSystemContent;
                   return (
                     <div key={message.id} className="flex justify-center">
                       <div className="max-w-sm w-full">
                         <div className={cn(
                           'border-t px-4 py-3 rounded-lg',
                           isAccepted
-                            ? 'border-green-200 bg-green-50'
-                            : 'border-amber-200 bg-amber-50'
+                            ? 'border-emerald-400/35 bg-emerald-400/12 backdrop-blur'
+                            : 'border-red-400/35 bg-red-400/12 backdrop-blur'
                         )}>
                           <div className="flex items-start gap-3">
-                            <CheckCircle2 className={cn('w-5 h-5 flex-shrink-0 mt-0.5', isAccepted ? 'text-green-600' : 'text-amber-600')} />
+                            <CheckCircle2 className={cn('w-5 h-5 flex-shrink-0 mt-0.5', isAccepted ? 'text-emerald-300' : 'text-red-300')} />
                             <div className="flex-1">
-                              <p className={cn('text-sm', isAccepted ? 'text-green-900' : 'text-amber-900')} style={{ fontWeight: 600 }}>
-                                {isAccepted ? 'Solution Accepted' : "Solution didn't work"}
+                              <p className={cn('text-sm', isAccepted ? 'text-emerald-100' : 'text-red-100')} style={{ fontWeight: 600 }}>
+                                {systemTitle}
                               </p>
-                              <p className={cn('text-xs mt-1', isAccepted ? 'text-green-700' : 'text-amber-700')}>{message.content}</p>
+                              {resolvedSystemContent.length > 0 && (
+                                <p className={cn('text-xs mt-1 break-words [overflow-wrap:anywhere] whitespace-pre-wrap', isAccepted ? 'text-emerald-200/85' : 'text-red-200/85')}>
+                                  {resolvedSystemContent}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -191,9 +223,6 @@ export function ConversationThread({
                 const isOwn = messageId === currentId;
                 const isStaffMessage = message.senderRole === 'staff';
                 const senderName = isStaffMessage ? `${message.senderName} - Staff` : message.senderName;
-                if (message.isSolutionProposal) {
-                  console.debug('Message with solution proposal:', message);
-                }
                 return (
                   <div
                     key={message.id}
@@ -211,27 +240,33 @@ export function ConversationThread({
                       <span className="text-xs text-white/40">{formatTime(message.timestamp)}</span>
                     </div>
 
-                    {/* Solution Proposal Badge */}
-                    {message.isSolutionProposal && (
-                      <div className={cn('flex items-center gap-1.5 mb-1', isOwn ? 'mr-8' : 'ml-8')}>
-                        <div className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/30 rounded-full px-2.5 py-0.5">
-                          <Lightbulb className="w-3 h-3 text-green-400" />
-                          <span className="text-xs text-green-300" style={{ fontWeight: 600 }}>Solution Proposal</span>
+                    <div className={cn('w-full flex', isOwn ? 'justify-end' : 'justify-start')}>
+                      <div className={cn('max-w-[72%] min-w-0 flex flex-col', isOwn ? 'items-end' : 'items-start')}>
+                        {/* Solution Proposal Badge */}
+                        {message.isSolutionProposal && (
+                          <div className="mb-1 inline-flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/20 px-2.5 py-0.5">
+                            <Lightbulb className="h-3 w-3 text-green-400" />
+                            <span className="text-xs text-green-300" style={{ fontWeight: 600 }}>
+                              Solution Proposal
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Bubble */}
+                        <div
+                          className={cn(
+                            'inline-block max-w-full px-4 py-3 rounded-2xl text-sm leading-relaxed border',
+                            isOwn
+                              ? 'bg-transparent border-white/20 text-white rounded-tr-sm'
+                              : 'bg-white/10 backdrop-blur text-white border border-white/20 rounded-tl-sm',
+                            message.isSolutionProposal && !isOwn && 'border-green-500/30 bg-green-500/10 text-green-300'
+                          )}
+                        >
+                          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                            {message.content}
+                          </p>
                         </div>
                       </div>
-                    )}
-
-                    {/* Bubble */}
-                    <div
-                      className={cn(
-                        'max-w-[72%] px-4 py-3 rounded-2xl text-sm leading-relaxed',
-                        isOwn
-                          ? 'bg-black text-white rounded-bl-sm'
-                          : 'bg-white/10 backdrop-blur text-white border border-white/20 rounded-br-sm',
-                        message.isSolutionProposal && !isOwn && 'border-green-500/30 bg-green-500/10 text-green-300'
-                      )}
-                    >
-                      <p className="whitespace-pre-wrap">{message.content}</p>
                     </div>
                   </div>
                 );
@@ -249,21 +284,21 @@ export function ConversationThread({
       </div>
 
       {/* Solution Proposal Banner (User Side) - Only show if solution not yet responded to */}
-      {!isStaff && !solutionAccepted && dismissedSolutionId === null && messages.some(m => m.isSolutionProposal && m.senderRole === 'staff') && !isResolved && !isClosed && (
-        <div className="border-t border-green-200 bg-green-50 px-6 py-4">
+      {!isStaff && !solutionAccepted && dismissedSolutionId === null && messages.some(m => m.isSolutionProposal && m.senderRole === 'staff') && !isClosed && (
+        <div className="border-t border-emerald-500/30 bg-emerald-950/35 px-6 py-4 backdrop-blur">
           <div className="flex items-start gap-3">
             <div className="flex-1">
-              <p className="text-sm text-green-900" style={{ fontWeight: 600 }}>Does this solution work for you?</p>
-              <p className="text-xs text-green-700 mt-1">Please let us know if the proposed solution resolved your issue.</p>
+              <p className="text-sm text-emerald-100" style={{ fontWeight: 600 }}>Does this solution work for you?</p>
+              <p className="text-xs mt-1 text-emerald-200/85">Please let us know if the proposed solution resolved your issue.</p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => {
                   if (onSolutionAccepted) {
-                    onSolutionAccepted();
+                    setShowSolutionAcceptanceConfirmation(true);
                   }
                 }}
-                className="flex-shrink-0 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg transition-colors"
+                className="flex-shrink-0 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs text-black transition-colors hover:bg-emerald-400"
                 style={{ fontWeight: 500 }}
               >
                 Yes
@@ -274,7 +309,7 @@ export function ConversationThread({
                     onSolutionRejected();
                   }
                 }}
-                className="flex-shrink-0 rounded-lg border border-green-600/80 bg-white px-3 py-1.5 text-xs text-green-900 shadow-sm transition-colors hover:border-green-700 hover:bg-green-50"
+                className="flex-shrink-0 rounded-lg border border-emerald-400/70 bg-black/30 px-3 py-1.5 text-xs text-emerald-100 shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-500/10"
                 style={{ fontWeight: 500 }}
               >
                 No
@@ -285,13 +320,13 @@ export function ConversationThread({
       )}
 
       {/* Solution Accepted System Message */}
-      {!isStaff && solutionAccepted && !isResolved && !isConversationEnded && (
-        <div className="border-t border-green-200 bg-green-50 px-6 py-4">
+      {!isStaff && solutionAccepted && !isClosed && (
+        <div className="border-t border-emerald-500/30 bg-emerald-950/35 px-6 py-4 backdrop-blur">
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-400" />
             <div className="flex-1">
-              <p className="text-sm text-green-900" style={{ fontWeight: 600 }}>Solution Accepted</p>
-              <p className="text-xs text-green-700 mt-1">Great! The issue has been resolved. You can continue messaging or mark this as solved when ready.</p>
+              <p className="text-sm text-emerald-100" style={{ fontWeight: 600 }}>Solution Accepted</p>
+              <p className="mt-1 text-xs text-emerald-200/85">Great! The issue has been resolved. You can continue messaging or mark this as solved when ready.</p>
             </div>
           </div>
         </div>
@@ -299,33 +334,24 @@ export function ConversationThread({
 
       {/* Conversation Ended Banner (for user rating) */}
       {isConversationEnded && !isStaff && (
-        <div className="border-t border-amber-200 bg-amber-50 px-6 py-4">
+        <div className="border-t border-amber-300/30 bg-amber-200/10 px-6 py-4 backdrop-blur">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-300/90" />
             <div className="flex-1">
-              <p className="text-sm text-amber-900" style={{ fontWeight: 600 }}>
-                {conversationEndedBy === 'user'
-                  ? 'You ended this conversation'
-                  : 'Conversation ended by staff'}
+              <p className="text-sm text-amber-100/90" style={{ fontWeight: 600 }}>
+                Conversation ended
               </p>
-              <p className="text-xs text-amber-700 mt-1">You can now rate your experience with the staff member's service.</p>
+              <p className="mt-1 text-xs text-amber-200/75">You can now rate your experience with the staff member's service.</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* End Conversation Banner */}
-      {isConversationEnded && (
-        <div className="border-t border-white/20 bg-white/5 backdrop-blur px-6 py-4 text-center">
-          <p className="text-sm text-white/60" style={{ fontWeight: 500 }}>Conversation ended. No more messages can be sent.</p>
-        </div>
-      )}
-
       {/* Input Area */}
-      {!isResolved && !isConversationEnded ? (
+      {!isClosed ? (
         <div className="border-t border-white/10 bg-black p-4">
           {/* Solution Proposal Toggle (Staff Only) */}
-          {isStaff && (
+          {isStaff && !solutionAccepted && (
             <div className="flex items-center mb-3">
               <button
                 type="button"
@@ -346,22 +372,25 @@ export function ConversationThread({
             </div>
           )}
 
+          {isStaff && solutionAccepted && (
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-emerald-400/35 bg-emerald-400/12 px-3 py-2 text-xs text-emerald-100">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+              <span style={{ fontWeight: 500 }}>
+                Solution accepted. New solution proposals are locked.
+              </span>
+            </div>
+          )}
+
           {/* End Conversation Button */}
-          {!isConversationEnded && (
+          {!isClosed && (
             <div className="mb-3 flex items-center">
               <button
                 onClick={() => setShowEndConfirmation(true)}
-                className={cn(
-                  'flex items-center gap-2 text-xs px-3 py-1.5 rounded-full border transition-all',
-                  solutionAccepted
-                    ? 'border-green-500/30 bg-green-500/10 text-green-300 hover:bg-green-500/20'
-                    : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20'
-                )}
+                className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 transition-all hover:bg-red-500/20"
                 style={{ fontWeight: 500 }}
               >
-                <span>{solutionAccepted ? 'Mark as Solved' : 'End Conversation'}</span>
+                <span>End Conversation</span>
               </button>
-              <span className="text-xs text-white/40 ml-2">{solutionAccepted ? '(Confirm resolution)' : ''}</span>
             </div>
           )}
 
@@ -406,23 +435,53 @@ export function ConversationThread({
       ) : (
         <div className="border-t border-white/10 bg-white/5 backdrop-blur p-4 flex items-center justify-center gap-2 text-white/60 text-sm">
           <Lock className="w-4 h-4" />
-          <span>This conversation is closed — complaint resolved</span>
+          <span>This conversation is closed — complaint closed</span>
         </div>
       )}
 
       {/* End Conversation Confirmation Dialog */}
+      {showSolutionAcceptanceConfirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-sm rounded-2xl border border-white/20 bg-black p-6 shadow-lg">
+            <h2 className="mb-2 text-lg text-white" style={{ fontWeight: 700 }}>
+              Confirm Solution Acceptance
+            </h2>
+            <p className="mb-6 text-sm text-white/60">
+              Are you sure this solution fully worked for your issue? If not, choose Not yet so staff can continue helping.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowSolutionAcceptanceConfirmation(false)}
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white transition-colors hover:bg-white/10"
+                style={{ fontWeight: 500 }}
+              >
+                Not yet
+              </button>
+              <button
+                onClick={() => {
+                  setShowSolutionAcceptanceConfirmation(false);
+                  if (onSolutionAccepted) {
+                    onSolutionAccepted();
+                  }
+                }}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white transition-colors hover:bg-emerald-700"
+                style={{ fontWeight: 500 }}
+              >
+                Yes, it worked
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showEndConfirmation && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-black border border-white/20 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-lg">
             <h2 className="text-lg text-white mb-2" style={{ fontWeight: 700 }}>
-              {solutionAccepted ? 'Mark as Solved?' : 'End Conversation?'}
+              End Conversation?
             </h2>
             <p className="text-sm text-white/60 mb-6">
-              {solutionAccepted
-                ? isStaff
-                  ? "Mark this complaint as resolved since the solution worked."
-                  : "Confirm that the issue has been resolved. You will then be able to rate the staff member's service."
-                : isStaff
+              {isStaff
                 ? "This will cancel the conversation. The complaint will not be marked as resolved."
                 : "This will end your conversation with the staff member. You can still rate their service."}
             </p>
@@ -441,13 +500,10 @@ export function ConversationThread({
                     onEndConversation();
                   }
                 }}
-                className={cn(
-                  'px-4 py-2 rounded-lg text-white text-sm transition-colors',
-                  solutionAccepted ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
-                )}
+                className="px-4 py-2 rounded-lg bg-red-600 text-sm text-white transition-colors hover:bg-red-700"
                 style={{ fontWeight: 500 }}
               >
-                {solutionAccepted ? 'Mark as Solved' : 'End Conversation'}
+                End Conversation
               </button>
             </div>
           </div>

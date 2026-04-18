@@ -6,6 +6,8 @@ import { StaffComplaintMobileSidebarPanel } from '../shared/ComplaintMobileSideb
 import { ConversationThread } from '../shared/ConversationThread';
 import complaintService from '../../../services/complaintService';
 import messageService from '../../../services/messageService';
+import { markConversationAsRead } from '../../../services/conversationUnreadService';
+import { hasAcceptedSolution } from '../../utils/solutionWorkflow';
 import { ArrowLeft, Calendar, ChevronDown, Lightbulb, Star, Tag, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -20,6 +22,11 @@ const statusConfig: Record<string, any> = {
   'Cancelled': { label: 'Cancelled', className: 'bg-red-50 text-red-500 border border-red-100', dot: 'bg-red-400' },
 };
 
+const isClosedConversationStatus = (status?: string): boolean => {
+  const normalizedStatus = status?.toLowerCase();
+  return normalizedStatus === 'resolved' || normalizedStatus === 'cancelled';
+};
+
 export function StaffComplaintView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -30,15 +37,7 @@ export function StaffComplaintView() {
   const [isLoading, setIsLoading] = useState(true);
   const [pollInterval, setPollInterval] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isConversationEnded, setIsConversationEnded] = useState(false);
-  const [solutionAccepted, setSolutionAccepted] = useState(false);
-
-  // Check if solution was accepted by looking for acceptance system message
-  useEffect(() => {
-    const accepted = messages.some(
-      m => m.isSystemMessage && m.content?.includes('accepted')
-    );
-    setSolutionAccepted(accepted);
-  }, [messages]);
+  const solutionAccepted = hasAcceptedSolution(messages);
 
   // Fetch complaint from backend
   useEffect(() => {
@@ -48,6 +47,9 @@ export function StaffComplaintView() {
         if (id) {
           const backendComplaint = await complaintService.getComplaintById(Number(id));
           setComplaint(backendComplaint);
+          if (isClosedConversationStatus(backendComplaint.status)) {
+            setIsConversationEnded(true);
+          }
         }
       } catch (error) {
         console.error('Failed to load complaint from backend:', error);
@@ -64,11 +66,22 @@ export function StaffComplaintView() {
   // Fetch messages from backend and set up polling
   useEffect(() => {
     if (!complaint?.complaintId) return;
+    const complaintId = complaint.complaintId;
 
     const fetchMessages = async () => {
       try {
-        const backendMessages = await messageService.getComplaintMessages(complaint.complaintId!);
+        const backendMessages = await messageService.getComplaintMessages(complaintId);
         setMessages(backendMessages);
+
+        const viewerUserId = Number(currentUser?.userId ?? currentUser?.id)
+        if (Number.isFinite(viewerUserId)) {
+          markConversationAsRead({
+            complaintId,
+            viewerRole: 'staff',
+            viewerUserId,
+            messages: backendMessages,
+          })
+        }
       } catch (error) {
         console.error('Failed to load messages:', error);
       }
@@ -82,7 +95,7 @@ export function StaffComplaintView() {
     setPollInterval(interval);
 
     return () => clearInterval(interval);
-  }, [complaint?.complaintId]);
+  }, [complaint?.complaintId, currentUser?.userId, currentUser?.id]);
 
   // Poll for complaint status changes
   useEffect(() => {
@@ -93,8 +106,8 @@ export function StaffComplaintView() {
         const updatedComplaint = await complaintService.getComplaintById(complaint.complaintId!);
         if (updatedComplaint) {
           setComplaint(updatedComplaint);
-          // Check if status has changed to resolved
-          if (updatedComplaint.status === 'Resolved' || updatedComplaint.status === 'resolved') {
+          // Check if status has changed to a closed state
+          if (isClosedConversationStatus(updatedComplaint.status)) {
             setIsConversationEnded(true);
             // Clear the polling interval if conversation is ended
             if (pollInterval) {
@@ -117,6 +130,11 @@ export function StaffComplaintView() {
 
   const handleSendMessage = async (content: string, isSolutionProposal?: boolean) => {
     if (!currentUser || !complaint?.complaintId) return;
+    if (isSolutionProposal && solutionAccepted) {
+      alert('A solution has already been accepted. Please mark this complaint as solved.');
+      return;
+    }
+
     try {
       // Send message to backend first
       const newMessage = await messageService.createMessage(
@@ -129,21 +147,23 @@ export function StaffComplaintView() {
       setMessages(prev => [...prev, newMessage]);
     } catch (error) {
       console.error('Failed to send message:', error);
-      alert('Failed to send message. Please try again.');
+      const serverMessage =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
+          ? (error as { response: { data: { message: string } } }).response.data.message
+          : null;
+      alert(serverMessage ?? 'Failed to send message. Please try again.');
     }
   };
 
   const handleEndConversation = async () => {
     if (!complaint?.complaintId) return;
     try {
-      // Check if solution was accepted by looking for acceptance system message
-      const solutionAccepted = messages.some(
-        m => m.isSystemMessage && m.content?.includes('accepted')
-      );
-      
-      // Set status based on whether solution was accepted
-      const newStatus = solutionAccepted ? 'Resolved' : 'Cancelled';
-      
+      // End Conversation should always be treated as cancelled.
+      const newStatus = 'cancelled';
+
       // Update complaint status
       await complaintService.updateComplaintStatus(complaint.complaintId, newStatus);
       // Update local state to reflect the status change
@@ -154,6 +174,14 @@ export function StaffComplaintView() {
       alert('Failed to end conversation. Please try again.');
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-full flex items-center justify-center">
+        <p className="text-white/60">Loading complaint...</p>
+      </div>
+    );
+  }
 
   if (!complaint) {
     return (

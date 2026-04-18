@@ -14,14 +14,22 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryMessage, setRecoveryMessage] = useState('');
+  const [recoveryError, setRecoveryError] = useState('');
+  const [isRecoveryLoading, setIsRecoveryLoading] = useState(false);
 
   const registeredParam = searchParams.get('registered');
+  const resetParam = searchParams.get('reset');
   const registeredBanner =
     registeredParam === 'user' || registeredParam === 'staff' ? registeredParam : null;
+  const resetBanner = resetParam === 'done' ? resetParam : null;
+  const loginFieldsLocked = showRecovery;
 
-  const dismissRegisteredBanner = () => {
+  const dismissQueryBanner = (key: string) => {
     const next = new URLSearchParams(searchParams);
-    next.delete('registered');
+    next.delete(key);
     setSearchParams(next, { replace: true });
   };
 
@@ -44,6 +52,37 @@ export function Login() {
       setError(err.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRecoveryToggle = () => {
+    const nextOpen = !showRecovery;
+    setShowRecovery(nextOpen);
+    setRecoveryError('');
+    setRecoveryMessage('');
+
+    if (nextOpen) {
+      setRecoveryEmail(prev => prev || email);
+    }
+  };
+
+  const handlePasswordRecovery = async () => {
+    setRecoveryError('');
+    setRecoveryMessage('');
+
+    if (!recoveryEmail.trim()) {
+      setRecoveryError('Please enter your email first.');
+      return;
+    }
+
+    setIsRecoveryLoading(true);
+    try {
+      const message = await authService.requestPasswordReset(recoveryEmail.trim());
+      setRecoveryMessage(message);
+    } catch (err: any) {
+      setRecoveryError(err.message || 'Unable to send password reset confirmation email.');
+    } finally {
+      setIsRecoveryLoading(false);
     }
   };
 
@@ -116,7 +155,7 @@ export function Login() {
               </p>
               <button
                 type="button"
-                onClick={dismissRegisteredBanner}
+                onClick={() => dismissQueryBanner('registered')}
                 className="mt-2 text-[11px] font-semibold text-emerald-300/90 underline-offset-2 hover:underline"
               >
                 Dismiss
@@ -131,8 +170,23 @@ export function Login() {
               </p>
               <button
                 type="button"
-                onClick={dismissRegisteredBanner}
+                onClick={() => dismissQueryBanner('registered')}
                 className="mt-2 text-[11px] font-semibold text-amber-200/90 underline-offset-2 hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {resetBanner === 'done' && (
+            <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+              <p className="text-xs text-emerald-200">
+                Password updated. You can now sign in with your new password.
+              </p>
+              <button
+                type="button"
+                onClick={() => dismissQueryBanner('reset')}
+                className="mt-2 text-[11px] font-semibold text-emerald-300/90 underline-offset-2 hover:underline"
               >
                 Dismiss
               </button>
@@ -142,7 +196,10 @@ export function Login() {
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm text-white/80 mb-1.5" style={{ fontWeight: 500 }}>
+              <label
+                className={`mb-1.5 block text-sm ${loginFieldsLocked ? 'text-white/45' : 'text-white/80'}`}
+                style={{ fontWeight: 500 }}
+              >
                 Email address
               </label>
               <input
@@ -150,13 +207,21 @@ export function Login() {
                 value={email}
                 onChange={e => { setEmail(e.target.value); setError(''); }}
                 placeholder="you@example.com"
-                className="w-full px-4 py-2.5 border border-white/20 rounded-xl text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/40 transition-colors bg-white/10 backdrop-blur"
+                disabled={loginFieldsLocked}
+                className={`w-full rounded-xl border px-4 py-2.5 text-sm transition-colors backdrop-blur ${
+                  loginFieldsLocked
+                    ? 'cursor-not-allowed border-white/10 bg-black/45 text-white/55 placeholder:text-white/30'
+                    : 'border-white/20 bg-white/10 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none focus:ring-1 focus:ring-white/40'
+                }`}
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm text-white/80 mb-1.5" style={{ fontWeight: 500 }}>
+              <label
+                className={`mb-1.5 block text-sm ${loginFieldsLocked ? 'text-white/45' : 'text-white/80'}`}
+                style={{ fontWeight: 500 }}
+              >
                 Password
               </label>
               <input
@@ -164,10 +229,66 @@ export function Login() {
                 value={password}
                 onChange={e => { setPassword(e.target.value); setError(''); }}
                 placeholder="Enter your password"
-              className="w-full px-4 py-2.5 border border-white/20 rounded-xl text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/40 transition-colors bg-white/10 backdrop-blur"
+                disabled={loginFieldsLocked}
+                className={`w-full rounded-xl border px-4 py-2.5 text-sm transition-colors backdrop-blur ${
+                  loginFieldsLocked
+                    ? 'cursor-not-allowed border-white/10 bg-black/45 text-white/55 placeholder:text-white/30'
+                    : 'border-white/20 bg-white/10 text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none focus:ring-1 focus:ring-white/40'
+                }`}
                 required
               />
+              <div className="mt-2 text-right">
+                <button
+                  type="button"
+                  onClick={handleRecoveryToggle}
+                  className="text-xs text-red-300 transition-colors hover:text-red-200 hover:underline"
+                  style={{ fontWeight: 600 }}
+                >
+                  {showRecovery ? 'Hide password recovery' : 'Forgot password?'}
+                </button>
+              </div>
             </div>
+
+            {showRecovery && (
+              <div className="rounded-xl border border-white/20 bg-white/10 p-3 backdrop-blur">
+                <p className="mb-2 text-xs text-white/70">
+                  Enter your account email. We will send a confirmation email to continue password reset.
+                </p>
+                <div className="space-y-2.5">
+                  <input
+                    type="email"
+                    value={recoveryEmail}
+                    onChange={e => {
+                      setRecoveryEmail(e.target.value);
+                      setRecoveryError('');
+                      setRecoveryMessage('');
+                    }}
+                    placeholder="you@example.com"
+                    className="w-full rounded-lg border border-white/20 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:outline-none focus:ring-1 focus:ring-white/40"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePasswordRecovery}
+                    disabled={isRecoveryLoading}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-600/22 px-3 py-2 text-xs text-red-100 transition-colors hover:bg-red-600/35 disabled:cursor-not-allowed disabled:opacity-55"
+                    style={{ fontWeight: 600 }}
+                  >
+                    {isRecoveryLoading ? (
+                      <>
+                        <Loader className="h-3.5 w-3.5 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      'Send confirmation email'
+                    )}
+                  </button>
+                </div>
+
+                {recoveryMessage && <p className="mt-2 text-[11px] text-emerald-200">{recoveryMessage}</p>}
+                {recoveryError && <p className="mt-2 text-[11px] text-red-300">{recoveryError}</p>}
+              </div>
+            )}
 
             {error && (
               <div className="p-3 bg-red-600/10 backdrop-blur border border-red-500/30 rounded-lg">
@@ -177,7 +298,7 @@ export function Login() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || loginFieldsLocked}
               className="w-full bg-black text-white py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ fontWeight: 600 }}
             >

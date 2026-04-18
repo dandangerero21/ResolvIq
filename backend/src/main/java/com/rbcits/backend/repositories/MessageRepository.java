@@ -10,4 +10,6 @@ import java.util.List;
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
     List<Message> findByComplaintOrderByTimestampAsc(Complaint complaint);
+
+    boolean existsByComplaintAndIsSystemMessageTrueAndContentContainingIgnoreCase(Complaint complaint, String content);
 }

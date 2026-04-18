@@ -28,6 +28,7 @@ public class ComplaintDTO {
     private Instant updatedAt;
     private Instant resolvedAt;
     private Integer rating;
+    private String ratingFeedback;
     private List<MessageDTO> messages;
     private AssignmentDTO assignment;
 }

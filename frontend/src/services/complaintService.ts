@@ -9,6 +9,7 @@ const normalizeComplaint = (complaint: any): Complaint => {
     complaintId: complaint.complaintId || Number(complaint.id),
     customCategory: complaint.customCategory ?? complaint.custom_category ?? undefined,
     categoryName: complaint.categoryName ?? complaint.category_name ?? undefined,
+    ratingFeedback: complaint.ratingFeedback ?? complaint.rating_feedback ?? undefined,
   }
 }
 

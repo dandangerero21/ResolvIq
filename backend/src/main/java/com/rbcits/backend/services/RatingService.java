@@ -78,9 +78,7 @@ public class RatingService {
         rating.setFeedback(feedback != null ? feedback : "");
 
         Rating saved = ratingRepository.save(rating);
-        complaint.setStatus("resolved");
-        complaintRepository.save(complaint);
-        
+
         return convertToDTO(saved);
     }
 

@@ -119,4 +119,15 @@ final class EmailHtmlTemplates {
                 + htmlContent
                 + "</div>";
     }
+
+          static String primaryButton(String href, String label) {
+            return "<p style=\"margin:18px 0 0 0;\">"
+                + "<a href=\""
+                + escape(href)
+                + "\" style=\"display:inline-block;background-color:"
+                + ACCENT
+                + ";color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 18px;border-radius:10px;\">"
+                + escape(label)
+                + "</a></p>";
+          }
 }

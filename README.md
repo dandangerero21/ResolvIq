@@ -39,6 +39,7 @@ npm run dev
 ```
 
 Dev server default: `http://localhost:5173`. Point the app at the API with `VITE_API_URL` if needed (e.g. `http://localhost:8080/api`).
+If `VITE_API_URL` is not set, the frontend uses `http://localhost:8080/api` in dev and `/api` in production builds.
 
 ### Seed admin (dev)
 
@@ -53,6 +54,11 @@ Change these in any real deployment.
 
 - **Backend:** Environment variables and `application.properties` / `application-prod.properties` — database URL, `SPRING_PROFILES_ACTIVE=prod` for production, CORS (`CORS_ORIGINS`), and optional mail: set `MAIL_ENABLED=true`, `MAIL_FROM`, `ADMIN_NOTIFY_EMAIL`, etc. For **Postmark on Render** (SMTP often blocked), set **`POSTMARK_SERVER_TOKEN`** — the app uses Postmark’s **HTTPS API** and does not open SMTP. For traditional SMTP, set `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` (ignored when `POSTMARK_SERVER_TOKEN` is set).
 - **Frontend:** `VITE_API_URL` for the REST API base URL when not using the default.
+
+Profile behavior:
+
+- **Local/default:** do not set `SPRING_PROFILES_ACTIVE` (or set it to a non-`prod` value) to use `application.properties` with H2 and localhost CORS defaults.
+- **Production:** set `SPRING_PROFILES_ACTIVE=prod` and provide Postgres + CORS env vars.
 
 ## Project layout
 

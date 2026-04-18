@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -6,25 +6,22 @@ import { ComplaintCard } from '../shared/ComplaintCard';
 import { ComplaintSortSelect } from '../shared/ComplaintSortSelect';
 import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
-import staffApplicationService, { StaffApplicationView } from '../../../services/staffApplicationService';
 import { Complaint } from '../../types';
-import { sortComplaints, partitionActiveAndResolved, type ComplaintSortKey } from '../../utils/complaintSort';
+import { sortComplaints, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
   ClipboardList,
   Clock,
   CheckCircle2,
-  AlertCircle,
   UserCheck,
   ArrowRight,
   TrendingUp,
   BarChart3,
   Users,
   Loader,
-  UserPlus,
   XCircle,
 } from 'lucide-react';
 
-type FilterKey = 'all' | 'open' | 'inprogress' | 'resolved';
+type FilterKey = 'all' | 'unassigned' | 'inprogress' | 'resolved' | 'cancelled';
 
 export function AdminDashboard() {
   const navigate = useNavigate();
@@ -34,30 +31,6 @@ export function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sortBy, setSortBy] = useState<ComplaintSortKey>('newest');
-  const [staffApplications, setStaffApplications] = useState<StaffApplicationView[]>([]);
-  const [staffAppsLoading, setStaffAppsLoading] = useState(false);
-  const [staffActionId, setStaffActionId] = useState<number | null>(null);
-
-  const refreshStaffApplications = useCallback(async () => {
-    if (currentUser?.role !== 'admin') {
-      setStaffApplications([]);
-      return;
-    }
-    setStaffAppsLoading(true);
-    try {
-      const list = await staffApplicationService.getPending();
-      setStaffApplications(list);
-    } catch (e) {
-      console.error('Failed to load staff applications', e);
-      setStaffApplications([]);
-    } finally {
-      setStaffAppsLoading(false);
-    }
-  }, [currentUser?.role]);
-
-  useEffect(() => {
-    void refreshStaffApplications();
-  }, [refreshStaffApplications]);
 
   useEffect(() => {
     const loadComplaints = async () => {
@@ -76,70 +49,105 @@ export function AdminDashboard() {
   }, []);
 
   const displayComplaints = complaints.length > 0 ? complaints : contextComplaints;
-  const total = displayComplaints.filter(c => c.status !== 'Cancelled' && c.status !== 'cancelled').length;
-  const open = displayComplaints.filter(c => c.status === 'open' || c.status === 'Open');
-  const inProgress = displayComplaints.filter(c => c.status === 'assigned' || c.status === 'In Progress');
-  const resolved = displayComplaints.filter(c => c.status === 'resolved' || c.status === 'Resolved');
-  const unassigned = displayComplaints.filter(c => !c.assignedStaffId && c.status !== 'Cancelled' && c.status !== 'cancelled');
+  const isResolvedStatus = (complaint: Complaint) => complaint.status === 'resolved' || complaint.status === 'Resolved';
+  const isCancelledStatus = (complaint: Complaint) => complaint.status === 'cancelled' || complaint.status === 'Cancelled';
+
+  const total = displayComplaints.length;
+  const completed = displayComplaints.filter(isResolvedStatus);
+  const cancelled = displayComplaints.filter(isCancelledStatus);
+  const inProgress = displayComplaints.filter(
+    complaint => Boolean(complaint.assignedStaffId) && !isResolvedStatus(complaint) && !isCancelledStatus(complaint)
+  );
+  const unassigned = displayComplaints.filter(
+    complaint => !complaint.assignedStaffId && !isResolvedStatus(complaint) && !isCancelledStatus(complaint)
+  );
 
   const filteredComplaints =
-    filter === 'open' ? open :
-    filter === 'inprogress' ? inProgress :
-    filter === 'resolved' ? resolved :
-    displayComplaints;
+    filter === 'unassigned'
+      ? unassigned
+      : filter === 'inprogress'
+        ? inProgress
+        : filter === 'resolved'
+          ? completed
+          : filter === 'cancelled'
+            ? cancelled
+            : displayComplaints;
 
   const sortedComplaints = useMemo(
     () => sortComplaints(filteredComplaints, sortBy),
     [filteredComplaints, sortBy]
   );
 
-  const { active: activeSorted, resolved: resolvedSorted } = useMemo(
-    () => partitionActiveAndResolved(sortedComplaints),
-    [sortedComplaints]
-  );
+  const allUnassignedSorted = useMemo(() => sortComplaints(unassigned, sortBy), [unassigned, sortBy]);
+  const allInProgressSorted = useMemo(() => sortComplaints(inProgress, sortBy), [inProgress, sortBy]);
+  const allCompletedSorted = useMemo(() => sortComplaints(completed, sortBy), [completed, sortBy]);
+  const allCancelledSorted = useMemo(() => sortComplaints(cancelled, sortBy), [cancelled, sortBy]);
 
-  /** Resolved pinned to bottom only when "All" shows both active and resolved rows. */
-  const showResolvedSection =
-    filter === 'all' && activeSorted.length > 0 && resolvedSorted.length > 0;
+  const breakdownRows = [
+    {
+      label: 'Completed',
+      count: completed.length,
+      textColor: 'text-emerald-200',
+      barColor: 'bg-emerald-500',
+    },
+    {
+      label: 'In Progress',
+      count: inProgress.length,
+      textColor: 'text-amber-200',
+      barColor: 'bg-amber-500',
+    },
+    {
+      label: 'Cancelled',
+      count: cancelled.length,
+      textColor: 'text-red-200',
+      barColor: 'bg-red-500',
+    },
+    {
+      label: 'Unassigned',
+      count: unassigned.length,
+      textColor: 'text-sky-200',
+      barColor: 'bg-sky-500',
+    },
+  ] as const;
 
-  const resolutionRate = total > 0 ? Math.round((resolved.length / total) * 100) : 0;
+  const percentageOfTotal = (count: number) => (total > 0 ? Math.round((count / total) * 100) : 0);
 
   const statsCards = [
     {
-      label: 'Total Complaints',
-      value: total,
-      icon: ClipboardList,
-      color: 'text-white',
-      bg: 'bg-white/10',
-      border: 'border-l-white/20',
-      key: 'all' as FilterKey,
-    },
-    {
-      label: 'Pending',
-      value: open.length,
-      icon: AlertCircle,
-      color: 'text-red-600',
-      bg: 'bg-red-50',
-      border: 'border-l-red-400',
-      key: 'open' as FilterKey,
+      label: 'Unassigned',
+      value: unassigned.length,
+      icon: UserCheck,
+      color: 'text-sky-300',
+      bg: 'bg-sky-500/20',
+      border: 'border-l-sky-400',
+      key: 'unassigned' as FilterKey,
     },
     {
       label: 'In Progress',
       value: inProgress.length,
       icon: Clock,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
+      color: 'text-amber-300',
+      bg: 'bg-amber-500/20',
       border: 'border-l-amber-400',
       key: 'inprogress' as FilterKey,
     },
     {
-      label: 'Resolved',
-      value: resolved.length,
+      label: 'Completed',
+      value: completed.length,
       icon: CheckCircle2,
-      color: 'text-white/60',
-      bg: 'bg-white/10',
-      border: 'border-l-white/20',
+      color: 'text-emerald-300',
+      bg: 'bg-emerald-500/20',
+      border: 'border-l-emerald-400',
       key: 'resolved' as FilterKey,
+    },
+    {
+      label: 'Cancelled',
+      value: cancelled.length,
+      icon: XCircle,
+      color: 'text-red-300',
+      bg: 'bg-red-500/20',
+      border: 'border-l-red-400',
+      key: 'cancelled' as FilterKey,
     },
   ];
 
@@ -204,87 +212,6 @@ export function AdminDashboard() {
       </div>
 
       <div className="min-w-0 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 md:min-h-0 md:flex-1 md:overflow-y-auto">
-        {currentUser?.role === 'admin' && (
-          <div className="mb-8">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="flex items-center gap-2 text-white" style={{ fontWeight: 600 }}>
-                <UserPlus className="h-4 w-4 text-amber-400" />
-                Pending staff applications
-              </h3>
-              {staffAppsLoading && <Loader className="h-4 w-4 animate-spin text-white/40" />}
-            </div>
-            {staffApplications.length === 0 && !staffAppsLoading ? (
-              <p className="text-sm text-white/50">No pending staff applications.</p>
-            ) : (
-              <ul className="space-y-3">
-                {staffApplications.map(app => (
-                  <li
-                    key={app.id}
-                    className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm text-white" style={{ fontWeight: 600 }}>
-                        {app.name}
-                      </p>
-                      <p className="text-xs text-white/60">{app.email}</p>
-                      <p className="mt-1 text-xs text-white/50">{app.specialization}</p>
-                      <p className="mt-1 text-[10px] uppercase tracking-wider text-white/35">
-                        Submitted {new Date(app.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={staffActionId !== null}
-                        onClick={async () => {
-                          setStaffActionId(app.id);
-                          try {
-                            await staffApplicationService.approve(app.id, currentUser?.userId);
-                            await refreshStaffApplications();
-                          } catch (err) {
-                            console.error(err);
-                            alert(err instanceof Error ? err.message : 'Approve failed');
-                          } finally {
-                            setStaffActionId(null);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/90 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        disabled={staffActionId !== null}
-                        onClick={async () => {
-                          const note = window.prompt('Optional note to include in the rejection email (leave blank for none):') ?? '';
-                          setStaffActionId(app.id);
-                          try {
-                            await staffApplicationService.reject(app.id, {
-                              reviewerUserId: currentUser?.userId,
-                              note: note || undefined,
-                            });
-                            await refreshStaffApplications();
-                          } catch (err) {
-                            console.error(err);
-                            alert(err instanceof Error ? err.message : 'Reject failed');
-                          } finally {
-                            setStaffActionId(null);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs font-semibold text-red-200 transition-colors hover:bg-red-900/50 disabled:opacity-50"
-                      >
-                        <XCircle className="h-3.5 w-3.5" />
-                        Reject
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
         {/* Bento: stats row + tall resolution + wide assignment (lg+) */}
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {statsCards.map(card => {
@@ -325,20 +252,29 @@ export function AdminDashboard() {
             <div className="flex h-full min-h-[180px] flex-col p-5 lg:min-h-[220px]">
               <div className="mb-3 flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-white/50" />
-                <p className="text-xs uppercase tracking-wider text-white/50">Resolution Rate</p>
+                <p className="text-xs uppercase tracking-wider text-white/50">Status Breakdown</p>
               </div>
-              <p className="mb-3 text-white" style={{ fontSize: '2.5rem', fontWeight: 700, lineHeight: 1 }}>
-                {resolutionRate}%
+              <p className="mb-3 text-xs text-white/40">
+                Tracking {total} complaint{total !== 1 ? 's' : ''}
               </p>
-              <div className="h-1.5 w-full rounded-full bg-white/10">
-                <div
-                  className="h-1.5 rounded-full bg-red-500 transition-all"
-                  style={{ width: `${resolutionRate}%` }}
-                />
+              <div className="space-y-2.5">
+                {breakdownRows.map(row => {
+                  const percent = percentageOfTotal(row.count);
+                  return (
+                    <div key={row.label}>
+                      <div className="mb-1 flex items-center justify-between text-[11px]">
+                        <span className={row.textColor}>{row.label}</span>
+                        <span className="text-white/55">
+                          {row.count} ({percent}%)
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-white/10">
+                        <div className={`h-1.5 rounded-full transition-all ${row.barColor}`} style={{ width: `${percent}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="mt-auto pt-3 text-xs text-white/30">
-                {resolved.length} of {total} resolved
-              </p>
             </div>
           </BorderGlow>
 
@@ -366,7 +302,7 @@ export function AdminDashboard() {
                       {unassigned.length} complaint{unassigned.length > 1 ? 's' : ''} need assignment
                     </p>
                     <p className="mt-0.5 text-sm text-white/60">
-                      Pending complaints are waiting for staff assignment
+                      Unassigned complaints are waiting for staff assignment
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-center gap-2 sm:flex-row">
@@ -403,15 +339,40 @@ export function AdminDashboard() {
         </div>
 
         {/* Complaint list */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {([
+            { key: 'all', label: 'All' },
+            { key: 'unassigned', label: 'Unassigned' },
+            { key: 'inprogress', label: 'In progress' },
+            { key: 'resolved', label: 'Completed' },
+            { key: 'cancelled', label: 'Cancelled' },
+          ] as const).map(option => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setFilter(option.key)}
+              className={`rounded-full border px-3 py-1.5 text-xs transition-all cursor-target ${
+                filter === option.key
+                  ? 'border-red-500/50 bg-red-500/15 text-red-200'
+                  : 'border-white/20 bg-white/5 text-white/65 hover:bg-white/10'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
         <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="min-w-0 truncate text-white" style={{ fontWeight: 600 }}>
             {filter === 'all'
               ? 'All Complaints'
-              : filter === 'open'
-                ? 'Pending Complaints'
+              : filter === 'unassigned'
+                ? 'Unassigned Complaints'
                 : filter === 'inprogress'
                   ? 'In Progress Complaints'
-                  : 'Resolved Complaints'}
+                  : filter === 'resolved'
+                    ? 'Completed Complaints'
+                    : 'Cancelled Complaints'}
           </h3>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 sm:gap-4">
             <ComplaintSortSelect
@@ -439,36 +400,75 @@ export function AdminDashboard() {
             </div>
             <p className="text-sm text-white/60">No complaints in this category</p>
           </div>
-        ) : showResolvedSection ? (
+        ) : filter === 'all' ? (
           <div className="min-w-0 space-y-8">
-            <div className="space-y-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-white/45" style={{ fontWeight: 600 }}>
-                Open &amp; in progress
-              </p>
-              {activeSorted.map((complaint, index) => (
-                <ComplaintCard
-                  key={complaint.id}
-                  complaint={complaint}
-                  showAssignment
-                  showUser
-                  playIntroGlow={index === 0}
-                />
-              ))}
-            </div>
-            <div className="space-y-3 border-t border-white/10 pt-6">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-white/45" style={{ fontWeight: 600 }}>
-                Resolved
-              </p>
-              {resolvedSorted.map(complaint => (
-                <ComplaintCard
-                  key={complaint.id}
-                  complaint={complaint}
-                  showAssignment
-                  showUser
-                  playIntroGlow={false}
-                />
-              ))}
-            </div>
+            {allUnassignedSorted.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45" style={{ fontWeight: 600 }}>
+                  Unassigned
+                </p>
+                {allUnassignedSorted.map((complaint, index) => (
+                  <ComplaintCard
+                    key={complaint.id}
+                    complaint={complaint}
+                    showAssignment
+                    showUser
+                    playIntroGlow={index === 0}
+                  />
+                ))}
+              </div>
+            )}
+
+            {allInProgressSorted.length > 0 && (
+              <div className="space-y-3 border-t border-white/10 pt-6">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45" style={{ fontWeight: 600 }}>
+                  In progress
+                </p>
+                {allInProgressSorted.map(complaint => (
+                  <ComplaintCard
+                    key={complaint.id}
+                    complaint={complaint}
+                    showAssignment
+                    showUser
+                    playIntroGlow={false}
+                  />
+                ))}
+              </div>
+            )}
+
+            {allCompletedSorted.length > 0 && (
+              <div className="space-y-3 border-t border-white/10 pt-6">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45" style={{ fontWeight: 600 }}>
+                  Completed
+                </p>
+                {allCompletedSorted.map(complaint => (
+                  <ComplaintCard
+                    key={complaint.id}
+                    complaint={complaint}
+                    showAssignment
+                    showUser
+                    playIntroGlow={false}
+                  />
+                ))}
+              </div>
+            )}
+
+            {allCancelledSorted.length > 0 && (
+              <div className="space-y-3 border-t border-white/10 pt-6">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45" style={{ fontWeight: 600 }}>
+                  Cancelled
+                </p>
+                {allCancelledSorted.map(complaint => (
+                  <ComplaintCard
+                    key={complaint.id}
+                    complaint={complaint}
+                    showAssignment
+                    showUser
+                    playIntroGlow={false}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="min-w-0 space-y-3">

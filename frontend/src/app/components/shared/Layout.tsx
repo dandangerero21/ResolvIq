@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import DarkVeil from '../../../components/DarkVeil';
+import staffApplicationService, {
+  subscribePendingStaffApplicationsUpdated,
+} from '../../../services/staffApplicationService';
 import {
   LayoutDashboard,
   PlusCircle,
@@ -49,11 +52,13 @@ type NavItem = (typeof userNav)[number];
 function SidebarContent({
   role,
   navItems,
+  pendingStaffApplications,
   onNavClick,
   onLogout,
 }: {
   role: string;
   navItems: NavItem[];
+  pendingStaffApplications: number;
   onNavClick?: () => void;
   onLogout: () => void;
 }) {
@@ -105,6 +110,12 @@ function SidebarContent({
               <>
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span className="flex-1">{label}</span>
+                {role === 'admin' && label === 'Staff Directory' && pendingStaffApplications > 0 && (
+                  <span
+                    aria-label={`${pendingStaffApplications} pending staff applications`}
+                    className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-red-500"
+                  />
+                )}
                 {isActive && <ChevronRight className="h-3 w-3 opacity-70" />}
               </>
             )}
@@ -145,6 +156,7 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [pendingStaffApplications, setPendingStaffApplications] = useState(0);
 
   const role = currentUser?.role ?? 'user';
   const navItems = role === 'user' ? userNav : role === 'staff' ? staffNav : adminNav;
@@ -152,6 +164,37 @@ export function Layout() {
   useEffect(() => {
     setMobileNavOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (role !== 'admin') {
+      setPendingStaffApplications(0);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadPendingCount = async () => {
+      try {
+        const pendingList = await staffApplicationService.getPending();
+        if (isMounted) {
+          setPendingStaffApplications(pendingList.length);
+        }
+      } catch (error) {
+        console.error('Failed to load pending staff applications for navigation badge:', error);
+        if (isMounted) {
+          setPendingStaffApplications(0);
+        }
+      }
+    };
+
+    void loadPendingCount();
+    const unsubscribe = subscribePendingStaffApplicationsUpdated(setPendingStaffApplications);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [role, location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -182,6 +225,7 @@ export function Layout() {
           <SidebarContent
             role={role}
             navItems={navItems}
+            pendingStaffApplications={pendingStaffApplications}
             onLogout={() => {
               handleLogout();
             }}
@@ -210,6 +254,7 @@ export function Layout() {
               <SidebarContent
                 role={role}
                 navItems={navItems}
+                pendingStaffApplications={pendingStaffApplications}
                 onNavClick={() => setMobileNavOpen(false)}
                 onLogout={() => {
                   setMobileNavOpen(false);

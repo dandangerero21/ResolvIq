@@ -5,6 +5,8 @@ import { ComplaintCard } from '../shared/ComplaintCard';
 import { ComplaintSortSelect } from '../shared/ComplaintSortSelect';
 import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
+import messageService from '../../../services/messageService';
+import { getConversationUnreadCount } from '../../../services/conversationUnreadService';
 import { Complaint } from '../../types';
 import { sortComplaints, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
@@ -31,6 +33,7 @@ export function StaffDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('active');
   const [sortBy, setSortBy] = useState<ComplaintSortKey>('newest');
+  const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
 
   useEffect(() => {
     const loadComplaints = async () => {
@@ -54,7 +57,74 @@ export function StaffDashboard() {
     const currentUserId = currentUser?.userId?.toString() || currentUser?.id?.toString();
     return complaintStaffId === currentUserId;
   });
-  const active = assigned.filter(c => c.status !== 'Resolved' && c.status !== 'resolved');
+
+  useEffect(() => {
+    const viewerUserId = Number(currentUser?.userId ?? currentUser?.id)
+    if (!Number.isFinite(viewerUserId)) {
+      setUnreadCounts({})
+      return
+    }
+
+    const complaintIds = Array.from(
+      new Set(
+        displayComplaints
+          .filter(complaint => complaint.assignedStaffId?.toString() === String(viewerUserId))
+          .map(complaint => complaint.complaintId ?? Number(complaint.id))
+          .filter((complaintId): complaintId is number => Number.isFinite(complaintId))
+      )
+    )
+
+    if (complaintIds.length === 0) {
+      setUnreadCounts({})
+      return
+    }
+
+    let isMounted = true
+
+    const refreshUnreadCounts = async () => {
+      const unreadEntries = await Promise.all(
+        complaintIds.map(async complaintId => {
+          try {
+            const messages = await messageService.getComplaintMessages(complaintId)
+            const unreadCount = getConversationUnreadCount({
+              complaintId,
+              viewerRole: 'staff',
+              viewerUserId,
+              messages,
+            })
+            return [complaintId, unreadCount] as const
+          } catch (error) {
+            console.error(`Failed to load unread count for complaint ${complaintId}:`, error)
+            return [complaintId, 0] as const
+          }
+        })
+      )
+
+      if (!isMounted) {
+        return
+      }
+
+      setUnreadCounts(Object.fromEntries(unreadEntries))
+    }
+
+    void refreshUnreadCounts()
+    const interval = setInterval(() => {
+      void refreshUnreadCounts()
+    }, 4000)
+
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [currentUser?.userId, currentUser?.id, displayComplaints])
+
+  const active = assigned.filter(
+    c =>
+      c.status !== 'Resolved' &&
+      c.status !== 'resolved' &&
+      c.status !== 'Cancelled' &&
+      c.status !== 'cancelled'
+  );
   const resolved = assigned.filter(c => c.status === 'Resolved' || c.status === 'resolved');
   const cancelledComplaints = assigned.filter(c => c.status === 'Cancelled' || c.status === 'cancelled');
 
@@ -265,6 +335,7 @@ export function StaffDashboard() {
                         complaint={complaint}
                         variant="staff"
                         showUser
+                        unreadMessageCount={unreadCounts[complaint.complaintId ?? Number(complaint.id)] ?? 0}
                         playIntroGlow={index === 0}
                         onClick={() => navigate(`/staff/complaint/${complaint.id}`)}
                       />

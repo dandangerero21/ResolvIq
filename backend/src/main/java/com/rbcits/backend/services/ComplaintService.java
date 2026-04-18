@@ -8,6 +8,7 @@ import com.rbcits.backend.repositories.ComplaintRepository;
 import com.rbcits.backend.repositories.UserRepository;
 import com.rbcits.backend.repositories.CategoryRepository;
 import org.springframework.stereotype.Service;
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -90,7 +91,16 @@ public class ComplaintService {
     public ComplaintDTO updateComplaintStatus(Long id, String status) {
         Complaint complaint = complaintRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Complaint not found"));
-        complaint.setStatus(status);
+
+        String normalizedStatus = status == null ? "" : status.trim().toLowerCase();
+        if (normalizedStatus.isEmpty()) {
+            throw new IllegalArgumentException("Status cannot be empty");
+        }
+
+        complaint.setStatus(normalizedStatus);
+        if (normalizedStatus.equals("resolved")) {
+            complaint.setResolvedAt(Instant.now());
+        }
         Complaint updated = complaintRepository.save(complaint);
         return convertToDTO(updated);
     }
@@ -122,6 +132,7 @@ public class ComplaintService {
             complaint.getUpdatedAt(),
             complaint.getResolvedAt(),
             complaint.getRating() != null ? complaint.getRating().getScore() : null,
+            complaint.getRating() != null ? complaint.getRating().getFeedback() : null,
             null,
             null
         );

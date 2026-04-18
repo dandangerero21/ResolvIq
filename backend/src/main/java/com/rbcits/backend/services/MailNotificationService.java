@@ -90,7 +90,10 @@ public class MailNotificationService {
 
     /** Fallback plain-only send (e.g. if MIME fails). */
     public void sendPlain(String to, String subject, String text) {
-        if (!mailEnabled || to == null || to.isBlank()) {
+        if (to == null || to.isBlank()) {
+            return;
+        }
+        if (!mailEnabled) {
             if (mailEnabledRequested && !mailEnabled) {
                 log.debug("Mail send skipped (transport not configured): to={} subject={}", to, subject);
             }
@@ -118,7 +121,10 @@ public class MailNotificationService {
     }
 
     public void sendHtmlMultipart(String to, String subject, String plainText, String htmlBody) {
-        if (!mailEnabled || to == null || to.isBlank()) {
+        if (to == null || to.isBlank()) {
+            return;
+        }
+        if (!mailEnabled) {
             if (mailEnabledRequested && !mailEnabled) {
                 log.debug("Mail send skipped (transport not configured): to={} subject={}", to, subject);
             }
@@ -312,4 +318,56 @@ public class MailNotificationService {
         String html = EmailHtmlTemplates.layout(appName, "Application update", inner);
         sendHtmlMultipart(applicantEmail, subject, plain, html);
     }
+
+        public void notifyPasswordResetConfirmation(
+            String recipientEmail,
+            String recipientName,
+            String confirmationUrl,
+            long expiryMinutes) {
+        if (recipientEmail == null || recipientEmail.isBlank()) {
+            return;
+        }
+        if (confirmationUrl == null || confirmationUrl.isBlank()) {
+            log.warn("Skipping password reset email for {} because confirmation URL is empty.", recipientEmail);
+            return;
+        }
+
+        String safeName = (recipientName == null || recipientName.isBlank()) ? "there" : recipientName.trim();
+        String subject = "[" + appName + "] Confirm password reset";
+        String plain = "Hello "
+            + safeName
+            + ",\n\n"
+            + "We received a request to reset your password for "
+            + appName
+            + ".\n"
+            + "If this was you, confirm by opening this link:\n"
+            + confirmationUrl
+            + "\n\n"
+            + "This link expires in "
+            + expiryMinutes
+            + " minutes.\n"
+            + "If you did not request this, you can ignore this email.";
+
+        String inner =
+            EmailHtmlTemplates.paragraph("Hello " + EmailHtmlTemplates.escape(safeName) + ",")
+                + EmailHtmlTemplates.paragraph(
+                    "We received a request to reset your password for "
+                        + "<strong style=\"color:"
+                        + EmailHtmlTemplates.TEXT
+                        + ";\">"
+                        + EmailHtmlTemplates.escape(appName)
+                        + "</strong>.")
+                + EmailHtmlTemplates.paragraph(
+                    "If this was you, click the confirmation button below.")
+                + EmailHtmlTemplates.primaryButton(confirmationUrl, "Yes, change my password")
+                + EmailHtmlTemplates.callout(
+                    false,
+                    "This link expires in "
+                        + expiryMinutes
+                        + " minutes. If you did not request this, simply ignore this email.")
+                + EmailHtmlTemplates.mutedLine("No password is changed until you submit a new one.");
+
+        String html = EmailHtmlTemplates.layout(appName, "Confirm password reset", inner);
+        sendHtmlMultipart(recipientEmail, subject, plain, html);
+        }
 }

@@ -18,6 +18,10 @@ export interface AuthResponse extends User {
   userId: number
 }
 
+interface SimpleMessageResponse {
+  message: string
+}
+
 export type RegistrationOutcome = 'user_registered' | 'staff_application_submitted'
 
 export interface RegistrationResult {
@@ -56,6 +60,40 @@ const authService = {
           ? error.response.data.message
           : error.response?.data?.message?.toString?.() || 'Signup failed'
       throw new Error(msg)
+    }
+  },
+
+  requestPasswordReset: async (email: string): Promise<string> => {
+    try {
+      const response = await api.post<SimpleMessageResponse>('/users/password-reset/request', {
+        email,
+      })
+      return response.data.message
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to request password reset')
+    }
+  },
+
+  validatePasswordResetToken: async (token: string): Promise<string> => {
+    try {
+      const response = await api.get<SimpleMessageResponse>('/users/password-reset/validate', {
+        params: { token },
+      })
+      return response.data.message
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Reset link is invalid or expired')
+    }
+  },
+
+  completePasswordReset: async (token: string, newPassword: string): Promise<string> => {
+    try {
+      const response = await api.post<SimpleMessageResponse>('/users/password-reset/complete', {
+        token,
+        newPassword,
+      })
+      return response.data.message
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to reset password')
     }
   },
 
