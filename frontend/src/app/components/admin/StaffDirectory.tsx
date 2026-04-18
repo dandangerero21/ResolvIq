@@ -130,12 +130,13 @@ export function StaffDirectory() {
   );
 
   const getStaffStats = useCallback(
-    (staffId: number) => {
+    (staff: User) => {
+      const staffId = Number(staff.userId);
       const staffComplaints = getStaffComplaints(staffId);
       const active = staffComplaints.filter(c => !isResolvedComplaint(c) && !isCancelledComplaint(c)).length;
       const resolved = staffComplaints.filter(isResolvedComplaint);
       const cancelled = staffComplaints.filter(isCancelledComplaint).length;
-      const transferred = complaints.filter(c => Number(c.transferredByStaffId) === staffId).length;
+      const transferred = Number(staff.transferredCount ?? 0);
       const rated = resolved.filter(c => c.rating);
       const avgRating =
         rated.length > 0
@@ -150,7 +151,7 @@ export function StaffDirectory() {
         avgRating,
       };
     },
-    [getStaffComplaints, complaints]
+    [getStaffComplaints]
   );
 
   const selectedStaffStats = useMemo(() => {
@@ -164,7 +165,7 @@ export function StaffDirectory() {
         avgRating: null as string | null,
       };
     }
-    return getStaffStats(Number(selectedStaff.userId));
+    return getStaffStats(selectedStaff);
   }, [selectedStaff, getStaffStats]);
 
   const selectedStaffComplaints = useMemo(() => {
@@ -341,8 +342,8 @@ export function StaffDirectory() {
             {staffMembers.map(staff => {
               const staffId = Number(staff.userId);
               const stats = Number.isFinite(staffId)
-                ? getStaffStats(staffId)
-                : { total: 0, active: 0, resolved: 0, cancelled: 0, avgRating: null as string | null };
+                ? getStaffStats(staff)
+                : { total: 0, active: 0, resolved: 0, cancelled: 0, transferred: 0, avgRating: null as string | null };
 
               return (
                 <button
