@@ -6,9 +6,11 @@ import { StaffComplaintMobileSidebarPanel } from '../shared/ComplaintMobileSideb
 import { ConversationThread } from '../shared/ConversationThread';
 import complaintService from '../../../services/complaintService';
 import messageService from '../../../services/messageService';
+import assignmentService from '../../../services/assignmentService';
+import userService, { User as StaffMember } from '../../../services/userService';
 import { markConversationAsRead } from '../../../services/conversationUnreadService';
 import { hasAcceptedSolution } from '../../utils/solutionWorkflow';
-import { ArrowLeft, Calendar, ChevronDown, Lightbulb, Star, Tag, User } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Calendar, ChevronDown, Lightbulb, Star, Tag, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const statusConfig: Record<string, any> = {
@@ -27,6 +29,17 @@ const isClosedConversationStatus = (status?: string): boolean => {
   return normalizedStatus === 'resolved' || normalizedStatus === 'cancelled';
 };
 
+const parseSpecializations = (specialization?: string): string[] =>
+  (specialization ?? '')
+    .split(',')
+    .map(spec => spec.trim())
+    .filter(spec => spec.length > 0);
+
+const formatTransferTargetOption = (staff: StaffMember): string => {
+  const specs = parseSpecializations(staff.specialization);
+  return specs.length > 0 ? `${staff.name} — ${specs.join(', ')}` : staff.name;
+};
+
 export function StaffComplaintView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -37,7 +50,11 @@ export function StaffComplaintView() {
   const [isLoading, setIsLoading] = useState(true);
   const [pollInterval, setPollInterval] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isConversationEnded, setIsConversationEnded] = useState(false);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [selectedTransferStaffId, setSelectedTransferStaffId] = useState('');
+  const [isTransferInProgress, setIsTransferInProgress] = useState(false);
   const solutionAccepted = hasAcceptedSolution(messages);
+  const currentStaffId = Number(currentUser?.userId ?? currentUser?.id);
 
   // Fetch complaint from backend
   useEffect(() => {
@@ -128,6 +145,39 @@ export function StaffComplaintView() {
     return () => clearInterval(statusPollInterval);
   }, [complaint?.complaintId, pollInterval]);
 
+  useEffect(() => {
+    if (currentUser?.role !== 'staff') {
+      setStaffMembers([]);
+      return;
+    }
+
+    const loadStaffMembers = async () => {
+      try {
+        const staff = await userService.getStaffMembers();
+        setStaffMembers(staff);
+      } catch (error) {
+        console.error('Failed to load staff members for transfer:', error);
+      }
+    };
+
+    void loadStaffMembers();
+  }, [currentUser?.role]);
+
+  useEffect(() => {
+    const availableTarget = staffMembers.find(staff => staff.userId !== currentStaffId);
+    if (!availableTarget) {
+      setSelectedTransferStaffId('');
+      return;
+    }
+
+    setSelectedTransferStaffId(prev => {
+      if (prev && staffMembers.some(staff => staff.userId === Number(prev) && staff.userId !== currentStaffId)) {
+        return prev;
+      }
+      return String(availableTarget.userId);
+    });
+  }, [staffMembers, currentStaffId]);
+
   const handleSendMessage = async (content: string, isSolutionProposal?: boolean) => {
     if (!currentUser || !complaint?.complaintId) return;
     if (isSolutionProposal && solutionAccepted) {
@@ -175,6 +225,55 @@ export function StaffComplaintView() {
     }
   };
 
+  const handleTransferComplaint = async () => {
+    if (!complaint?.complaintId || !Number.isFinite(currentStaffId)) {
+      return;
+    }
+    if (solutionAccepted) {
+      alert('Transfer is disabled because the customer already accepted a solution.');
+      return;
+    }
+
+    const toStaffId = Number(selectedTransferStaffId);
+    if (!Number.isFinite(toStaffId)) {
+      alert('Please select a staff member to transfer this complaint to.');
+      return;
+    }
+
+    setIsTransferInProgress(true);
+    try {
+      await assignmentService.transferComplaint(complaint.complaintId, currentStaffId, toStaffId);
+      const targetStaff = staffMembers.find(staff => staff.userId === toStaffId);
+      const targetStaffName = targetStaff?.name ?? 'the selected staff member';
+
+      setComplaint(prev =>
+        prev
+          ? {
+              ...prev,
+              assignedStaffId: toStaffId,
+              assignedStaffName: targetStaffName,
+              status: 'assigned',
+            }
+          : prev
+      );
+
+      alert(`Complaint transferred to ${targetStaffName}.`);
+      navigate('/staff/dashboard');
+    } catch (error) {
+      console.error('Failed to transfer complaint:', error);
+      const serverMessage =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
+          ? (error as { response: { data: { message: string } } }).response.data.message
+          : null;
+      alert(serverMessage ?? 'Failed to transfer complaint. Please try again.');
+    } finally {
+      setIsTransferInProgress(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-full flex items-center justify-center">
@@ -192,6 +291,16 @@ export function StaffComplaintView() {
   }
 
   const status = statusConfig[complaint.status];
+  const availableTransferTargets = staffMembers.filter(staff => staff.userId !== currentStaffId);
+  const selectedTransferTarget = availableTransferTargets.find(
+    staff => staff.userId === Number(selectedTransferStaffId)
+  );
+  const selectedTransferTargetSpecs = parseSpecializations(selectedTransferTarget?.specialization);
+  const isCurrentStaffAssignee =
+    Number.isFinite(currentStaffId) &&
+    complaint.assignedStaffId?.toString() === String(currentStaffId) &&
+    !isClosedConversationStatus(complaint.status);
+  const canTransferComplaint = isCurrentStaffAssignee && !solutionAccepted;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
@@ -207,6 +316,73 @@ export function StaffComplaintView() {
           </div>
         </details>
       </div>
+
+      {isCurrentStaffAssignee && (
+        <div className="shrink-0 border-b border-white/10 bg-black px-4 pb-3 md:hidden">
+          {canTransferComplaint ? (
+            <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-3">
+              <div className="flex items-center gap-2">
+                <ArrowRightLeft className="h-4 w-4 text-violet-300" />
+                <p className="text-xs text-violet-100" style={{ fontWeight: 600 }}>
+                  Transfer complaint
+                </p>
+              </div>
+              <p className="mt-1 text-[11px] text-violet-100/75">
+                Reassign to another staff member based on specialization.
+              </p>
+              <div className="mt-2 space-y-2">
+                <select
+                  value={selectedTransferStaffId}
+                  onChange={event => setSelectedTransferStaffId(event.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-black/60 px-3 py-2 text-xs text-white focus:border-violet-400/50 focus:outline-none"
+                  disabled={isTransferInProgress || availableTransferTargets.length === 0}
+                >
+                  {availableTransferTargets.length === 0 && <option value="">No other staff available</option>}
+                  {availableTransferTargets.map(staff => (
+                    <option key={staff.userId} value={String(staff.userId)}>
+                      {formatTransferTargetOption(staff)}
+                    </option>
+                  ))}
+                </select>
+                {selectedTransferTargetSpecs.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedTransferTargetSpecs.map(spec => (
+                      <span
+                        key={spec}
+                        className="rounded-full border border-violet-400/35 bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-100"
+                      >
+                        {spec}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleTransferComplaint}
+                  disabled={
+                    isTransferInProgress ||
+                    availableTransferTargets.length === 0 ||
+                    !selectedTransferStaffId
+                  }
+                  className="w-full rounded-lg bg-violet-600 px-4 py-2 text-xs text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ fontWeight: 600 }}
+                >
+                  {isTransferInProgress ? 'Transferring…' : 'Transfer'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+              <p className="text-xs text-emerald-100" style={{ fontWeight: 600 }}>
+                Transfer locked
+              </p>
+              <p className="mt-1 text-[11px] text-emerald-100/80">
+                The customer already accepted a solution for this complaint.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Header — tablet/desktop */}
       <div className="hidden shrink-0 border-b border-white/10 bg-black px-4 py-4 sm:px-8 sm:py-5 md:block">
@@ -276,6 +452,71 @@ export function StaffComplaintView() {
               <Lightbulb className="w-4 h-4 text-amber-400 flex-shrink-0" />
               <p className="text-amber-300 text-xs">
                 Use the <span style={{ fontWeight: 600 }}>Solution Proposal</span> toggle when sending a message that resolves the issue.
+              </p>
+            </div>
+          )}
+
+          {canTransferComplaint && (
+            <div className="mt-2 rounded-xl border border-violet-500/25 bg-violet-500/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <ArrowRightLeft className="h-4 w-4 text-violet-300" />
+                <p className="text-xs text-violet-200" style={{ fontWeight: 600 }}>
+                  Transfer complaint
+                </p>
+              </div>
+              <p className="mt-1 text-xs text-violet-100/75">
+                Pass this complaint to another staff member. The customer will be notified that a new staff member is now handling it.
+              </p>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={selectedTransferStaffId}
+                  onChange={event => setSelectedTransferStaffId(event.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-black/50 px-3 py-2 text-xs text-white focus:border-violet-400/50 focus:outline-none"
+                  disabled={isTransferInProgress || availableTransferTargets.length === 0}
+                >
+                  {availableTransferTargets.length === 0 && <option value="">No other staff available</option>}
+                  {availableTransferTargets.map(staff => (
+                    <option key={staff.userId} value={String(staff.userId)}>
+                      {formatTransferTargetOption(staff)}
+                    </option>
+                  ))}
+                </select>
+                {selectedTransferTargetSpecs.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 sm:max-w-[60%]">
+                    {selectedTransferTargetSpecs.map(spec => (
+                      <span
+                        key={spec}
+                        className="rounded-full border border-violet-400/35 bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-100"
+                      >
+                        {spec}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleTransferComplaint}
+                  disabled={
+                    isTransferInProgress ||
+                    availableTransferTargets.length === 0 ||
+                    !selectedTransferStaffId
+                  }
+                  className="rounded-lg bg-violet-600 px-4 py-2 text-xs text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ fontWeight: 600 }}
+                >
+                  {isTransferInProgress ? 'Transferring…' : 'Transfer'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isCurrentStaffAssignee && solutionAccepted && (
+            <div className="mt-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+              <p className="text-xs text-emerald-100" style={{ fontWeight: 600 }}>
+                Transfer locked
+              </p>
+              <p className="mt-1 text-xs text-emerald-100/80">
+                This complaint can no longer be transferred because a solution has been accepted.
               </p>
             </div>
           )}

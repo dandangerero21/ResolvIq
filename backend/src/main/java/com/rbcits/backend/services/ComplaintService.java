@@ -133,6 +133,11 @@ public class ComplaintService {
             complaint.getResolvedAt(),
             complaint.getRating() != null ? complaint.getRating().getScore() : null,
             complaint.getRating() != null ? complaint.getRating().getFeedback() : null,
+            complaint.getAssignmentCount(),
+            complaint.getReassignmentCount(),
+            complaint.getTransferCount(),
+            complaint.getTransferredByStaffId(),
+            complaint.getTransferredByStaffName(),
             null,
             null
         );

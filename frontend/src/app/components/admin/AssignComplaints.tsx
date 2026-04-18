@@ -9,6 +9,7 @@ import {
   UserPlus,
   CheckCircle2,
   Star,
+  RefreshCw,
   ChevronDown,
   Filter,
   ArrowLeft,
@@ -23,6 +24,11 @@ const priorityConfig = {
   Medium: { className: 'bg-amber-500/20 text-amber-200', border: 'border-l-amber-400' },
   High: { className: 'bg-orange-500/20 text-orange-200', border: 'border-l-orange-400' },
   Critical: { className: 'bg-red-600 text-red-100', border: 'border-l-red-600' },
+};
+
+const isClosedStatus = (status?: string) => {
+  const normalized = status?.toLowerCase();
+  return normalized === 'resolved' || normalized === 'cancelled';
 };
 
 export function AssignComplaints() {
@@ -77,7 +83,13 @@ export function AssignComplaints() {
     loadStaff();
   }, []);
 
-  const unassigned = complaints.filter(c => !c.assignedStaffId && c.complaintId);
+  const unassigned = complaints.filter(
+    c =>
+      !c.assignedStaffId &&
+      c.complaintId &&
+      !isClosedStatus(c.status) &&
+      Boolean(c.createdById || c.createdByName || c.userName)
+  );
 
   const filtered = filterPriority === 'all'
     ? unassigned
@@ -209,7 +221,6 @@ export function AssignComplaints() {
             {filtered.map(complaint => {
               const priority = priorityConfig[complaint.priority || 'Medium'];
               const matchingStaff = getMatchingStaff(complaint);
-              const otherStaff = staffMembers.filter(s => !matchingStaff.includes(s));
               const selectedId = complaint.complaintId ? selections[complaint.complaintId] : undefined;
               const selectedStaff = staffMembers.find(s => s.userId === selectedId);
               const isAssigned = complaint.complaintId ? assigned[complaint.complaintId] : false;
@@ -236,6 +247,12 @@ export function AssignComplaints() {
                           <span className={cn('text-xs px-2 py-0.5 rounded-full', priority.className)}>
                             {complaint.priority}
                           </span>
+                          {(complaint.assignmentCount ?? 0) > 0 && !complaint.assignedStaffId && (
+                            <span className="flex items-center gap-1 text-xs bg-violet-500/20 text-violet-200 border border-violet-400/35 px-2 py-0.5 rounded-full">
+                              <RefreshCw className="w-3 h-3" />
+                              Reassignment
+                            </span>
+                          )}
                           {isAssigned && (
                             <span className="flex items-center gap-1 text-xs bg-white/10 text-white/70 border border-white/20 px-2 py-0.5 rounded-full">
                               <CheckCircle2 className="w-3 h-3" />

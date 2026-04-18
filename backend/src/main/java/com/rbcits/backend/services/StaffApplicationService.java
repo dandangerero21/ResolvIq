@@ -42,8 +42,9 @@ public class StaffApplicationService {
 
         String email = dto.getEmail().trim();
         String name = dto.getName().trim();
+        String specialization = dto.getSpecialization().trim();
 
-        if (userRepository.findByEmail(email).isPresent()) {
+        if (userRepository.findByEmailIgnoreCase(email).isPresent()) {
             throw new IllegalArgumentException("An account with this email already exists");
         }
         if (userRepository.findByName(name).isPresent()) {
@@ -52,18 +53,16 @@ public class StaffApplicationService {
 
         String encoded = passwordEncoder.encode(dto.getPassword());
 
-        StaffApplication existing = staffApplicationRepository.findByEmail(email).orElse(null);
+        StaffApplication existing = staffApplicationRepository.findByEmailIgnoreCase(email).orElse(null);
         if (existing != null) {
             if (existing.getStatus() == StaffApplicationStatus.PENDING) {
                 throw new IllegalArgumentException("A staff application for this email is already pending review");
             }
-            if (existing.getStatus() == StaffApplicationStatus.APPROVED) {
-                throw new IllegalArgumentException("This email has already been approved as staff");
-            }
-            // REJECTED — allow resubmission
+
+            // REJECTED or stale APPROVED (approved before but account no longer exists) — allow resubmission
             existing.setName(name);
             existing.setPassword(encoded);
-            existing.setSpecialization(dto.getSpecialization().trim());
+            existing.setSpecialization(specialization);
             existing.setStatus(StaffApplicationStatus.PENDING);
             existing.setCreatedAt(Instant.now());
             existing.setReviewedAt(null);
@@ -75,13 +74,13 @@ public class StaffApplicationService {
             app.setEmail(email);
             app.setName(name);
             app.setPassword(encoded);
-            app.setSpecialization(dto.getSpecialization().trim());
+            app.setSpecialization(specialization);
             app.setStatus(StaffApplicationStatus.PENDING);
             app.setCreatedAt(Instant.now());
             staffApplicationRepository.save(app);
         }
 
-        mailNotificationService.notifyAdminNewStaffApplication(name, email, dto.getSpecialization().trim());
+        mailNotificationService.notifyAdminNewStaffApplication(name, email, specialization);
         mailNotificationService.notifyApplicantStaffApplicationReceived(email, name);
 
         return new RegistrationResponse(
@@ -94,7 +93,7 @@ public class StaffApplicationService {
         if (email == null || email.isBlank()) {
             return false;
         }
-        return staffApplicationRepository.findByEmail(email.trim())
+        return staffApplicationRepository.findByEmailIgnoreCase(email.trim())
                 .map(a -> a.getStatus() == StaffApplicationStatus.PENDING)
                 .orElse(false);
     }
@@ -113,7 +112,7 @@ public class StaffApplicationService {
         if (app.getStatus() != StaffApplicationStatus.PENDING) {
             throw new IllegalArgumentException("Only pending applications can be approved");
         }
-        if (userRepository.findByEmail(app.getEmail()).isPresent()) {
+        if (userRepository.findByEmailIgnoreCase(app.getEmail()).isPresent()) {
             throw new IllegalArgumentException("A user with this email already exists");
         }
 
@@ -123,6 +122,7 @@ public class StaffApplicationService {
         user.setPassword(app.getPassword());
         user.setRole("staff");
         user.setSpecialization(app.getSpecialization());
+        user.setTransferredCount(0);
         userRepository.save(user);
 
         app.setStatus(StaffApplicationStatus.APPROVED);

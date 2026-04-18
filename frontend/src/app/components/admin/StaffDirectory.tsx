@@ -21,11 +21,12 @@ import {
   Loader,
   UserPlus,
   XCircle,
+  ArrowRightLeft,
   ClipboardList,
   Calendar,
 } from 'lucide-react';
 
-type StaffModalFilter = 'all' | 'inprogress' | 'resolved' | 'cancelled';
+type StaffModalFilter = 'all' | 'inprogress' | 'resolved' | 'cancelled' | 'transferred';
 
 const isResolvedComplaint = (complaint: Complaint): boolean =>
   complaint.status === 'resolved' || complaint.status === 'Resolved';
@@ -129,32 +130,54 @@ export function StaffDirectory() {
   );
 
   const getStaffStats = useCallback(
-    (staffId: number) => {
+    (staff: User) => {
+      const staffId = Number(staff.userId);
       const staffComplaints = getStaffComplaints(staffId);
       const active = staffComplaints.filter(c => !isResolvedComplaint(c) && !isCancelledComplaint(c)).length;
       const resolved = staffComplaints.filter(isResolvedComplaint);
       const cancelled = staffComplaints.filter(isCancelledComplaint).length;
+      const transferred = Number(staff.transferredCount ?? 0);
       const rated = resolved.filter(c => c.rating);
       const avgRating =
         rated.length > 0
           ? (rated.reduce((s, c) => s + (c.rating ?? 0), 0) / rated.length).toFixed(1)
           : null;
-      return { total: staffComplaints.length, active, resolved: resolved.length, cancelled, avgRating };
+      return {
+        total: staffComplaints.length,
+        active,
+        resolved: resolved.length,
+        cancelled,
+        transferred,
+        avgRating,
+      };
     },
     [getStaffComplaints]
   );
 
   const selectedStaffStats = useMemo(() => {
     if (!selectedStaff?.userId) {
-      return { total: 0, active: 0, resolved: 0, cancelled: 0, avgRating: null as string | null };
+      return {
+        total: 0,
+        active: 0,
+        resolved: 0,
+        cancelled: 0,
+        transferred: 0,
+        avgRating: null as string | null,
+      };
     }
-    return getStaffStats(Number(selectedStaff.userId));
+    return getStaffStats(selectedStaff);
   }, [selectedStaff, getStaffStats]);
 
   const selectedStaffComplaints = useMemo(() => {
     if (!selectedStaff?.userId) return [];
     return getStaffComplaints(Number(selectedStaff.userId));
   }, [selectedStaff, getStaffComplaints]);
+
+  const selectedTransferredComplaints = useMemo(() => {
+    if (!selectedStaff?.userId) return [];
+    const selectedStaffId = Number(selectedStaff.userId);
+    return complaints.filter(complaint => Number(complaint.transferredByStaffId) === selectedStaffId);
+  }, [selectedStaff, complaints]);
 
   const filteredStaffComplaints = useMemo(() => {
     if (staffModalFilter === 'inprogress') {
@@ -166,8 +189,11 @@ export function StaffDirectory() {
     if (staffModalFilter === 'cancelled') {
       return selectedStaffComplaints.filter(isCancelledComplaint);
     }
+    if (staffModalFilter === 'transferred') {
+      return selectedTransferredComplaints;
+    }
     return selectedStaffComplaints;
-  }, [selectedStaffComplaints, staffModalFilter]);
+  }, [selectedStaffComplaints, selectedTransferredComplaints, staffModalFilter]);
 
   const sortedStaffComplaints = useMemo(
     () => sortComplaints(filteredStaffComplaints, staffModalSort),
@@ -316,8 +342,8 @@ export function StaffDirectory() {
             {staffMembers.map(staff => {
               const staffId = Number(staff.userId);
               const stats = Number.isFinite(staffId)
-                ? getStaffStats(staffId)
-                : { total: 0, active: 0, resolved: 0, cancelled: 0, avgRating: null as string | null };
+                ? getStaffStats(staff)
+                : { total: 0, active: 0, resolved: 0, cancelled: 0, transferred: 0, avgRating: null as string | null };
 
               return (
                 <button
@@ -348,7 +374,7 @@ export function StaffDirectory() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-4 divide-x divide-white/10 border-b border-white/10">
+                  <div className="grid grid-cols-5 divide-x divide-white/10 border-b border-white/10">
                     <div className="flex flex-col items-center px-2 py-3">
                       <Zap className="mb-1 h-3 w-3 text-white/60" />
                       <p className="text-white" style={{ fontWeight: 700 }}>{stats.total}</p>
@@ -368,6 +394,11 @@ export function StaffDirectory() {
                       <XCircle className="mb-1 h-3 w-3 text-red-400" />
                       <p className="text-red-300" style={{ fontWeight: 700 }}>{stats.cancelled}</p>
                       <p className="text-xs text-white/60">Cancelled</p>
+                    </div>
+                    <div className="flex flex-col items-center px-2 py-3">
+                      <ArrowRightLeft className="mb-1 h-3 w-3 text-violet-300" />
+                      <p className="text-violet-200" style={{ fontWeight: 700 }}>{stats.transferred}</p>
+                      <p className="text-xs text-white/60">Transferred</p>
                     </div>
                   </div>
 
@@ -439,7 +470,7 @@ export function StaffDirectory() {
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-5 sm:p-6">
-              <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-6">
                 <div className="rounded-xl border border-white/15 bg-white/5 p-3">
                   <p className="text-[10px] uppercase tracking-wider text-white/45">Total</p>
                   <p className="mt-1 text-lg text-white" style={{ fontWeight: 700 }}>{selectedStaffStats.total}</p>
@@ -456,6 +487,10 @@ export function StaffDirectory() {
                   <p className="text-[10px] uppercase tracking-wider text-red-200/70">Cancelled</p>
                   <p className="mt-1 text-lg text-red-200" style={{ fontWeight: 700 }}>{selectedStaffStats.cancelled}</p>
                 </div>
+                <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-violet-200/75">Transferred</p>
+                  <p className="mt-1 text-lg text-violet-100" style={{ fontWeight: 700 }}>{selectedStaffStats.transferred}</p>
+                </div>
                 <div className="rounded-xl border border-white/15 bg-white/5 p-3">
                   <p className="text-[10px] uppercase tracking-wider text-white/45">Avg. Rating</p>
                   <p className="mt-1 text-lg text-white" style={{ fontWeight: 700 }}>
@@ -470,6 +505,7 @@ export function StaffDirectory() {
                   { key: 'inprogress', label: 'In Progress' },
                   { key: 'resolved', label: 'Completed' },
                   { key: 'cancelled', label: 'Cancelled' },
+                  { key: 'transferred', label: 'Transferred' },
                 ] as const).map(option => (
                   <button
                     key={option.key}
@@ -529,6 +565,11 @@ export function StaffDirectory() {
                           <span className={`rounded-full px-2 py-0.5 ${getPriorityBadgeClass(complaint.priority)}`}>
                             {complaint.priority ?? 'Medium'}
                           </span>
+                          {selectedStaff?.userId && Number(complaint.transferredByStaffId) === Number(selectedStaff.userId) && (
+                            <span className="rounded-full border border-violet-500/35 bg-violet-500/20 px-2 py-0.5 text-violet-200">
+                              Transferred by this staff
+                            </span>
+                          )}
                           <span>By {complaint.createdByName || complaint.userName || 'Unknown'}</span>
                           <span className="text-white/30">•</span>
                           <span className="inline-flex items-center gap-1">

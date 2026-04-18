@@ -18,12 +18,14 @@ public class UserDTO {
     private String password;
     private String role;
     private String specialization;
+    private Integer transferredCount;
 
-    public UserDTO(Long userId, String name, String email, String role, String specialization) {
+    public UserDTO(Long userId, String name, String email, String role, String specialization, Integer transferredCount) {
         this.userId = userId;
         this.name = name;
         this.email = email;
         this.role = role;
         this.specialization = specialization;
+        this.transferredCount = transferredCount;
     }
 }

@@ -3,31 +3,57 @@ package com.rbcits.backend.services;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.rbcits.backend.DTOs.DeleteAccountRequestDTO;
+import com.rbcits.backend.DTOs.LoginResponseDTO;
 import com.rbcits.backend.DTOs.PasswordResetCompleteDTO;
 import com.rbcits.backend.DTOs.PasswordResetRequestDTO;
+import com.rbcits.backend.repositories.AssignmentRepository;
+import com.rbcits.backend.repositories.ComplaintRepository;
+import com.rbcits.backend.repositories.MessageRepository;
 import com.rbcits.backend.repositories.UserRepository;
 import com.rbcits.backend.repositories.PasswordResetTokenRepository;
+import com.rbcits.backend.repositories.RatingRepository;
 import com.rbcits.backend.DTOs.RegistrationResponse;
 import com.rbcits.backend.DTOs.SimpleMessageResponse;
 import com.rbcits.backend.DTOs.UserDTO;
+import com.rbcits.backend.models.Assignment;
+import com.rbcits.backend.models.Complaint;
+import com.rbcits.backend.models.Message;
 import com.rbcits.backend.models.PasswordResetToken;
+import com.rbcits.backend.models.Rating;
 import com.rbcits.backend.models.User;
 
 @Service
 public class UserService {
 
+    private static final String DELETE_ACCOUNT_CONFIRMATION_PHRASE = "Yes, I want to delete my account.";
+    private static final String ACCOUNT_DELETION_SYSTEM_MESSAGE =
+            "Conversation ended automatically because this account was deleted.";
+        private static final String STAFF_REASSIGNMENT_PENDING_SYSTEM_MESSAGE =
+            "Your assigned staff account was deleted. An admin will reassign your complaint to a new staff member.";
+
     private final UserRepository userRepository;
+    private final AuthTokenService authTokenService;
     private final PasswordEncoder passwordEncoder;
     private final StaffApplicationService staffApplicationService;
+    private final ComplaintRepository complaintRepository;
+    private final AssignmentRepository assignmentRepository;
+    private final MessageRepository messageRepository;
+    private final RatingRepository ratingRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final MailNotificationService mailNotificationService;
     private final String frontendBaseUrl;
@@ -35,15 +61,25 @@ public class UserService {
 
     public UserService(
             UserRepository userRepository,
+            AuthTokenService authTokenService,
             PasswordEncoder passwordEncoder,
             StaffApplicationService staffApplicationService,
+            ComplaintRepository complaintRepository,
+            AssignmentRepository assignmentRepository,
+            MessageRepository messageRepository,
+            RatingRepository ratingRepository,
             PasswordResetTokenRepository passwordResetTokenRepository,
             MailNotificationService mailNotificationService,
             @Value("${app.frontend.base-url:http://localhost:5173}") String frontendBaseUrl,
             @Value("${app.auth.password-reset.expiry-minutes:30}") long passwordResetExpiryMinutes) {
         this.userRepository = userRepository;
+        this.authTokenService = authTokenService;
         this.passwordEncoder = passwordEncoder;
         this.staffApplicationService = staffApplicationService;
+        this.complaintRepository = complaintRepository;
+        this.assignmentRepository = assignmentRepository;
+        this.messageRepository = messageRepository;
+        this.ratingRepository = ratingRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.mailNotificationService = mailNotificationService;
         this.frontendBaseUrl = normalizeFrontendBaseUrl(frontendBaseUrl);
@@ -60,16 +96,23 @@ public class UserService {
             return staffApplicationService.submitFromRegistration(dto);
         }
 
-        if (userRepository.findByEmail(dto.getEmail()).isPresent() || userRepository.findByName(dto.getName()).isPresent()) {
+        String email = dto.getEmail() == null ? "" : dto.getEmail().trim();
+        String name = dto.getName() == null ? "" : dto.getName().trim();
+        if (email.isEmpty() || name.isEmpty()) {
+            throw new IllegalArgumentException("Name and email are required");
+        }
+
+        if (userRepository.findByEmailIgnoreCase(email).isPresent() || userRepository.findByName(name).isPresent()) {
             throw new IllegalArgumentException("Email or name already in use");
         }
 
         User user = new User();
-        user.setName(dto.getName());
-        user.setEmail(dto.getEmail());
+        user.setName(name);
+        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setRole("user");
         user.setSpecialization(dto.getSpecialization());
+        user.setTransferredCount(0);
 
         userRepository.save(user);
 
@@ -78,7 +121,7 @@ public class UserService {
                 "Account created. Sign in with your email and password.");
     }
 
-    public UserDTO loginUser(String email, String password) {
+    public LoginResponseDTO loginUser(String email, String password) {
 
         if(email == null || email.isEmpty()) {
             throw new IllegalArgumentException("Email cannot be empty.");
@@ -101,13 +144,140 @@ public class UserService {
             throw new IllegalArgumentException("Invalid password.");
         }
 
-        return new UserDTO(user.getUserId(), user.getName(), user.getEmail(), user.getRole(), user.getSpecialization());
+        String token = authTokenService.issueToken(user);
+        return new LoginResponseDTO(
+                user.getUserId(),
+                user.getName(),
+                user.getEmail(),
+                user.getRole(),
+                user.getSpecialization(),
+                token);
     }
 
     public List<UserDTO> getAllUsers() {
         return userRepository.findAll().stream()
-                .map(user -> new UserDTO(user.getUserId(), user.getName(), user.getEmail(), user.getRole(), user.getSpecialization()))
+                .map(user -> new UserDTO(
+                        user.getUserId(),
+                        user.getName(),
+                        user.getEmail(),
+                        user.getRole(),
+                        user.getSpecialization(),
+                        user.getTransferredCount()))
                 .toList();
+    }
+
+    @Transactional
+    public SimpleMessageResponse deleteAccount(Long userId, DeleteAccountRequestDTO request, String authorizationHeader) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User id is required.");
+        }
+
+        Long authenticatedUserId = authTokenService.extractUserIdFromAuthorizationHeader(authorizationHeader);
+        if (!userId.equals(authenticatedUserId)) {
+            throw new AccessDeniedException("You can only delete your own account.");
+        }
+
+        String confirmationText = request == null ? null : request.confirmationText();
+        if (!DELETE_ACCOUNT_CONFIRMATION_PHRASE.equals(confirmationText)) {
+            throw new IllegalArgumentException(
+                    "Please type the exact confirmation phrase to delete your account.");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
+
+        if (user.getRole() != null && user.getRole().equalsIgnoreCase("admin")) {
+            throw new IllegalArgumentException("Administrator accounts cannot be deleted.");
+        }
+
+        Instant now = Instant.now();
+        List<Complaint> createdComplaints = complaintRepository.findByCreatedBy(user);
+        List<Assignment> assignedComplaints = assignmentRepository.findByAssignedTo(user);
+
+        boolean deletingStaffAccount = user.getRole() != null && user.getRole().equalsIgnoreCase("staff");
+        Map<Long, Complaint> complaintsCreatedByUserById = new LinkedHashMap<>();
+        Map<Long, Complaint> complaintsToPersistById = new LinkedHashMap<>();
+        List<Message> systemMessages = new ArrayList<>();
+
+        for (Complaint complaint : createdComplaints) {
+            if (complaint == null || complaint.getComplaintId() == null) {
+                continue;
+            }
+
+            complaint.setStatus("cancelled");
+            complaint.setResolvedAt(now);
+            complaint.setCreatedBy(null);
+
+            complaintsCreatedByUserById.put(complaint.getComplaintId(), complaint);
+            complaintsToPersistById.put(complaint.getComplaintId(), complaint);
+            systemMessages.add(buildSystemMessage(complaint, ACCOUNT_DELETION_SYSTEM_MESSAGE));
+        }
+
+        for (Assignment assignment : assignedComplaints) {
+            Complaint complaint = assignment.getComplaint();
+            if (complaint == null || complaint.getComplaintId() == null) {
+                continue;
+            }
+
+            // Detach one-to-one link before assignment deletion to avoid transient reference issues on flush.
+            complaint.setAssignment(null);
+            if (complaint.getAssignmentCount() == null || complaint.getAssignmentCount() < 1) {
+                complaint.setAssignmentCount(1);
+            }
+
+            boolean complaintCreatedByDeletedAccount = complaintsCreatedByUserById.containsKey(complaint.getComplaintId());
+            if (deletingStaffAccount && !complaintCreatedByDeletedAccount) {
+                if (!isClosedComplaintStatus(complaint.getStatus())) {
+                    complaint.setStatus("open");
+                    complaint.setResolvedAt(null);
+                }
+                systemMessages.add(buildSystemMessage(complaint, STAFF_REASSIGNMENT_PENDING_SYSTEM_MESSAGE));
+            }
+
+            complaintsToPersistById.put(complaint.getComplaintId(), complaint);
+        }
+
+        if (!complaintsToPersistById.isEmpty()) {
+            complaintRepository.saveAll(complaintsToPersistById.values());
+        }
+        if (!systemMessages.isEmpty()) {
+            messageRepository.saveAll(systemMessages);
+        }
+
+        if (!assignedComplaints.isEmpty()) {
+            assignmentRepository.deleteAll(assignedComplaints);
+        }
+
+        List<Rating> ratingsToDelete = new ArrayList<>();
+        ratingsToDelete.addAll(ratingRepository.findByUser(user));
+        ratingsToDelete.addAll(ratingRepository.findByStaff(user));
+        if (!ratingsToDelete.isEmpty()) {
+            Map<Long, Rating> uniqueRatingsById = new LinkedHashMap<>();
+            for (Rating rating : ratingsToDelete) {
+                if (rating != null && rating.getRatingId() != null) {
+                    uniqueRatingsById.put(rating.getRatingId(), rating);
+                }
+            }
+            if (!uniqueRatingsById.isEmpty()) {
+                ratingRepository.deleteAll(uniqueRatingsById.values());
+            }
+        }
+
+        List<Message> sentMessages = messageRepository.findBySender(user);
+        if (!sentMessages.isEmpty()) {
+            for (Message message : sentMessages) {
+                message.setSender(null);
+            }
+            messageRepository.saveAll(sentMessages);
+        }
+
+        List<PasswordResetToken> resetTokens = passwordResetTokenRepository.findByUser(user);
+        if (!resetTokens.isEmpty()) {
+            passwordResetTokenRepository.deleteAll(resetTokens);
+        }
+
+        userRepository.delete(user);
+        return new SimpleMessageResponse("Account deleted permanently.");
     }
 
     @Transactional
@@ -215,6 +385,25 @@ public class UserService {
             normalized = "https://" + normalized;
         }
         return normalized;
+    }
+
+    private Message buildSystemMessage(Complaint complaint, String content) {
+        Message systemMessage = new Message();
+        systemMessage.setComplaint(complaint);
+        systemMessage.setSender(null);
+        systemMessage.setContent(content);
+        systemMessage.setTimestamp(LocalDateTime.now());
+        systemMessage.setSolved(false);
+        systemMessage.setSolutionProposal(false);
+        systemMessage.setSystemMessage(true);
+        return systemMessage;
+    }
+
+    private boolean isClosedComplaintStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+        return status.equalsIgnoreCase("resolved") || status.equalsIgnoreCase("cancelled");
     }
 
 }

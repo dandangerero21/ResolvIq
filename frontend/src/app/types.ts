@@ -61,6 +61,11 @@ export interface Complaint {
   resolvedAt?: Date;
   rating?: number;
   ratingFeedback?: string;
+  assignmentCount?: number;
+  reassignmentCount?: number;
+  transferCount?: number;
+  transferredByStaffId?: number;
+  transferredByStaffName?: string;
   messages?: Message[];
   assignment?: Assignment;
 }

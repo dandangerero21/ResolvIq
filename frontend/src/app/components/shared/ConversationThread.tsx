@@ -98,6 +98,8 @@ export function ConversationThread({
   const isResolved = statusValue === 'resolved';
   const isCancelled = statusValue === 'cancelled';
   const isClosed = isResolved || isCancelled || isConversationEnded;
+  const canRateAfterClose =
+    typeof complaint.assignedStaffId === 'number' && Number.isFinite(complaint.assignedStaffId);
 
   useEffect(() => {
     if (solutionAccepted && markAsSolution) {
@@ -169,9 +171,29 @@ export function ConversationThread({
               {group.messages.map(message => {
                 // Check if this is a system message
                 if (message.isSystemMessage) {
-                  const isAccepted = isAcceptedSystemMessage(message);
-                  const systemTitle = isAccepted ? 'Solution Accepted' : "Solution didn't work";
                   const systemContent = message.content?.trim() ?? '';
+                  const normalizedSystemContent = systemContent.toLowerCase();
+                  const isAccepted = isAcceptedSystemMessage(message);
+                  const isRejected =
+                    !isAccepted &&
+                    (normalizedSystemContent.includes("didn't work") ||
+                      normalizedSystemContent.includes('did not resolve') ||
+                      normalizedSystemContent.includes('solution rejected'));
+                  const isAssignmentUpdate =
+                    !isAccepted &&
+                    !isRejected &&
+                    (normalizedSystemContent.includes('reassigned') ||
+                      normalizedSystemContent.includes('transferred') ||
+                      normalizedSystemContent.includes('new staff') ||
+                      normalizedSystemContent.includes('now handling your complaint'));
+
+                  const systemTitle = isAccepted
+                    ? 'Solution Accepted'
+                    : isRejected
+                      ? "Solution didn't work"
+                      : isAssignmentUpdate
+                        ? 'Assignment Updated'
+                        : 'Conversation Update';
                   const hasDistinctSystemContent =
                     systemContent.length > 0 &&
                     systemContent.toLowerCase() !== systemTitle.toLowerCase();
@@ -185,27 +207,55 @@ export function ConversationThread({
                     ? systemContent
                     : isAccepted
                       ? fallbackAcceptedContent
-                      : fallbackRejectedContent;
-                  const resolvedSystemContent = isAccepted
+                      : isRejected
+                        ? fallbackRejectedContent
+                        : systemContent;
+                  const resolvedSystemContent = isAccepted && rawResolvedSystemContent.length > 0
                     ? rawResolvedSystemContent.replace(/[.]+$/, '').concat('!')
                     : rawResolvedSystemContent;
+
+                  const panelClass = isAccepted
+                    ? 'border-emerald-400/35 bg-emerald-400/12 backdrop-blur'
+                    : isRejected
+                      ? 'border-red-400/35 bg-red-400/12 backdrop-blur'
+                      : isAssignmentUpdate
+                        ? 'border-sky-400/35 bg-sky-400/12 backdrop-blur'
+                        : 'border-white/20 bg-white/5 backdrop-blur';
+                  const iconClass = isAccepted
+                    ? 'text-emerald-300'
+                    : isRejected
+                      ? 'text-red-300'
+                      : isAssignmentUpdate
+                        ? 'text-sky-300'
+                        : 'text-white/60';
+                  const titleClass = isAccepted
+                    ? 'text-emerald-100'
+                    : isRejected
+                      ? 'text-red-100'
+                      : isAssignmentUpdate
+                        ? 'text-sky-100'
+                        : 'text-white/90';
+                  const bodyClass = isAccepted
+                    ? 'text-emerald-200/85'
+                    : isRejected
+                      ? 'text-red-200/85'
+                      : isAssignmentUpdate
+                        ? 'text-sky-200/85'
+                        : 'text-white/70';
+
+                  const SystemIcon = isRejected ? AlertCircle : CheckCircle2;
                   return (
                     <div key={message.id} className="flex justify-center">
                       <div className="max-w-sm w-full">
-                        <div className={cn(
-                          'border-t px-4 py-3 rounded-lg',
-                          isAccepted
-                            ? 'border-emerald-400/35 bg-emerald-400/12 backdrop-blur'
-                            : 'border-red-400/35 bg-red-400/12 backdrop-blur'
-                        )}>
+                        <div className={cn('border-t px-4 py-3 rounded-lg', panelClass)}>
                           <div className="flex items-start gap-3">
-                            <CheckCircle2 className={cn('w-5 h-5 flex-shrink-0 mt-0.5', isAccepted ? 'text-emerald-300' : 'text-red-300')} />
+                            <SystemIcon className={cn('w-5 h-5 flex-shrink-0 mt-0.5', iconClass)} />
                             <div className="flex-1">
-                              <p className={cn('text-sm', isAccepted ? 'text-emerald-100' : 'text-red-100')} style={{ fontWeight: 600 }}>
+                              <p className={cn('text-sm', titleClass)} style={{ fontWeight: 600 }}>
                                 {systemTitle}
                               </p>
                               {resolvedSystemContent.length > 0 && (
-                                <p className={cn('text-xs mt-1 break-words [overflow-wrap:anywhere] whitespace-pre-wrap', isAccepted ? 'text-emerald-200/85' : 'text-red-200/85')}>
+                                <p className={cn('text-xs mt-1 break-words [overflow-wrap:anywhere] whitespace-pre-wrap', bodyClass)}>
                                   {resolvedSystemContent}
                                 </p>
                               )}
@@ -218,11 +268,16 @@ export function ConversationThread({
                 }
 
                 // Handle both string and number IDs - normalize to strings for comparison
-                const messageId = String(message.senderId);
+                const messageId = String(message.senderId ?? '');
                 const currentId = String(currentUser?.userId || currentUser?.id || '');
                 const isOwn = messageId === currentId;
                 const isStaffMessage = message.senderRole === 'staff';
-                const senderName = isStaffMessage ? `${message.senderName} - Staff` : message.senderName;
+                const baseSenderName =
+                  typeof message.senderName === 'string' && message.senderName.trim().length > 0
+                    ? message.senderName.trim()
+                    : 'Deleted account';
+                const senderName = isStaffMessage ? `${baseSenderName} - Staff` : baseSenderName;
+                const senderInitial = baseSenderName.charAt(0).toUpperCase();
                 return (
                   <div
                     key={message.id}
@@ -234,7 +289,7 @@ export function ConversationThread({
                         'w-6 h-6 rounded-full flex items-center justify-center text-white flex-shrink-0',
                         isOwn ? 'bg-black' : isStaffMessage ? 'bg-amber-500' : 'bg-red-500'
                       )} style={{ fontSize: '10px', fontWeight: 700 }}>
-                        {message.senderName.charAt(0)}
+                        {senderInitial}
                       </div>
                       <span className="text-xs text-white/60">{senderName}</span>
                       <span className="text-xs text-white/40">{formatTime(message.timestamp)}</span>
@@ -341,7 +396,11 @@ export function ConversationThread({
               <p className="text-sm text-amber-100/90" style={{ fontWeight: 600 }}>
                 Conversation ended
               </p>
-              <p className="mt-1 text-xs text-amber-200/75">You can now rate your experience with the staff member's service.</p>
+              <p className="mt-1 text-xs text-amber-200/75">
+                {canRateAfterClose
+                  ? "You can now rate your experience with the staff member's service."
+                  : 'Rating is unavailable because this complaint currently has no assigned staff member.'}
+              </p>
             </div>
           </div>
         </div>

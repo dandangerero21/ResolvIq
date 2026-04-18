@@ -47,6 +47,26 @@ public class Complaint {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    /** Number of times this complaint has been assigned to any staff member. */
+    @Column(name = "assignment_count")
+    private Integer assignmentCount = 0;
+
+    /** Number of assignment events that were reassignments (not first-time assignment). */
+    @Column(name = "reassignment_count")
+    private Integer reassignmentCount = 0;
+
+    /** Number of times this complaint was transferred by staff to another staff member. */
+    @Column(name = "transfer_count")
+    private Integer transferCount = 0;
+
+    /** Last staff member who transferred this complaint (for admin tracking). */
+    @Column(name = "transferred_by_staff_id")
+    private Long transferredByStaffId;
+
+    /** Display name for the last staff member who transferred this complaint. */
+    @Column(name = "transferred_by_staff_name", length = 120)
+    private String transferredByStaffName;
+
     @ManyToOne
     @JoinColumn(name = "user_id")
     @JsonBackReference
@@ -78,6 +98,15 @@ public class Complaint {
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;
+        if (assignmentCount == null) {
+            assignmentCount = 0;
+        }
+        if (reassignmentCount == null) {
+            reassignmentCount = 0;
+        }
+        if (transferCount == null) {
+            transferCount = 0;
+        }
     }
 
     @PreUpdate

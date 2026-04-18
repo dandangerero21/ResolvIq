@@ -61,6 +61,8 @@ export function UserComplaintView() {
   const [hasSubmittedRating, setHasSubmittedRating] = useState(false);
   const [hasCheckedExistingRating, setHasCheckedExistingRating] = useState(false);
   const isSolutionAccepted = solutionAccepted || hasAcceptedSolution(messages);
+  const hasAssignedStaff =
+    typeof complaint?.assignedStaffId === 'number' && Number.isFinite(complaint.assignedStaffId);
 
   // Fetch complaint from backend
   useEffect(() => {
@@ -171,10 +173,15 @@ export function UserComplaintView() {
       return;
     }
 
-    if (isConversationEnded && !showRating && !hasSubmittedRating) {
+    if (isConversationEnded && hasAssignedStaff && !showRating && !hasSubmittedRating) {
       setShowRating(true);
+      return;
     }
-  }, [isConversationEnded, showRating, hasSubmittedRating, hasCheckedExistingRating]);
+
+    if (!hasAssignedStaff && showRating) {
+      setShowRating(false);
+    }
+  }, [isConversationEnded, showRating, hasSubmittedRating, hasCheckedExistingRating, hasAssignedStaff]);
 
   // Check if complaint already has a rating (user already rated it)
   useEffect(() => {
@@ -300,9 +307,8 @@ export function UserComplaintView() {
   const handleSubmitRating = async () => {
     if (rating > 0 && complaint && currentUser) {
       try {
-        // Get staffId from assignment or complaint
-        const staffId = complaint.assignedStaffId || complaint.assignedStaffName;
-        if (!staffId) {
+        const staffId = complaint.assignedStaffId;
+        if (typeof staffId !== 'number' || !Number.isFinite(staffId)) {
           alert('Cannot submit rating: No staff member assigned to this complaint.');
           return;
         }
@@ -338,7 +344,7 @@ export function UserComplaintView() {
       sessionStorage.setItem(`complaint-ended-by-${complaint.complaintId}`, 'user');
       setConversationEndedBy('user');
       setIsConversationEnded(true);
-      setShowRating(true);
+      setShowRating(hasAssignedStaff);
     } catch (error) {
       console.error('Failed to end conversation:', error);
       alert('Failed to end conversation. Please try again.');

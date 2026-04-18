@@ -3,10 +3,15 @@ package com.rbcits.backend.controllers;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import com.rbcits.backend.DTOs.DeleteAccountRequestDTO;
+import com.rbcits.backend.DTOs.LoginResponseDTO;
 import com.rbcits.backend.DTOs.PasswordResetCompleteDTO;
 import com.rbcits.backend.DTOs.PasswordResetRequestDTO;
 import com.rbcits.backend.DTOs.RegistrationResponse;
@@ -32,7 +37,7 @@ public class UserController {
     }
 
     @PostMapping("/login")
-    public UserDTO loginUser(@RequestBody UserDTO userDTO) {
+    public LoginResponseDTO loginUser(@RequestBody UserDTO userDTO) {
         return userService.loginUser(userDTO.getEmail(), userDTO.getPassword());
     }
 
@@ -49,6 +54,14 @@ public class UserController {
     @PostMapping("/password-reset/complete")
     public SimpleMessageResponse completePasswordReset(@RequestBody PasswordResetCompleteDTO request) {
         return userService.completePasswordReset(request);
+    }
+
+    @DeleteMapping("/{userId}")
+    public SimpleMessageResponse deleteAccount(
+            @PathVariable Long userId,
+            @RequestHeader(name = "Authorization", required = false) String authorizationHeader,
+            @RequestBody DeleteAccountRequestDTO request) {
+        return userService.deleteAccount(userId, request, authorizationHeader);
     }
 
     @GetMapping
