@@ -107,8 +107,7 @@ export function StaffComplaintMobileSidebarPanel({ complaint }: { complaint: Com
   const navigate = useNavigate();
   const status = staffStatusConfig[complaint.status] || staffStatusConfig.open;
   const showTip = complaint.status !== 'Resolved' && complaint.status !== 'resolved';
-  const showRating =
-    (complaint.status === 'Resolved' || complaint.status === 'resolved') && complaint.rating != null;
+  const showRating = complaint.rating != null;
 
   return (
     <div className="space-y-3 text-xs">

@@ -10,6 +10,7 @@ interface ConversationThreadProps {
   messages: Message[];
   onSendMessage: (content: string, isSolutionProposal?: boolean) => void;
   onEndConversation?: () => void;
+  onMarkAsSolved?: () => void;
   onSolutionAccepted?: () => void;
   onSolutionRejected?: () => void;
   isStaff?: boolean;
@@ -25,6 +26,7 @@ export function ConversationThread({
   messages,
   onSendMessage,
   onEndConversation,
+  onMarkAsSolved,
   onSolutionAccepted,
   onSolutionRejected,
   isStaff = false,
@@ -440,16 +442,27 @@ export function ConversationThread({
             </div>
           )}
 
-          {/* End Conversation Button */}
+          {/* End Conversation / Mark as Solved Button */}
           {!isClosed && (
             <div className="mb-3 flex items-center">
-              <button
-                onClick={() => setShowEndConfirmation(true)}
-                className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 transition-all hover:bg-red-500/20"
-                style={{ fontWeight: 500 }}
-              >
-                <span>End Conversation</span>
-              </button>
+              {solutionAccepted ? (
+                <button
+                  onClick={() => setShowEndConfirmation(true)}
+                  className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 transition-all hover:bg-emerald-500/20"
+                  style={{ fontWeight: 500 }}
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Mark as Solved</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowEndConfirmation(true)}
+                  className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 transition-all hover:bg-red-500/20"
+                  style={{ fontWeight: 500 }}
+                >
+                  <span>End Conversation</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -537,12 +550,16 @@ export function ConversationThread({
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-black border border-white/20 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-lg">
             <h2 className="text-lg text-white mb-2" style={{ fontWeight: 700 }}>
-              End Conversation?
+              {solutionAccepted ? 'Mark as Solved?' : 'End Conversation?'}
             </h2>
             <p className="text-sm text-white/60 mb-6">
-              {isStaff
-                ? "This will cancel the conversation. The complaint will not be marked as resolved."
-                : "This will end your conversation with the staff member. You can still rate their service."}
+              {solutionAccepted
+                ? isStaff
+                  ? 'This will mark the complaint as resolved and close the conversation.'
+                  : 'This will mark the complaint as resolved. You can still rate the staff member\'s service.'
+                : isStaff
+                  ? "This will cancel the conversation. The complaint will not be marked as resolved."
+                  : "This will end your conversation with the staff member. You can still rate their service."}
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -555,14 +572,20 @@ export function ConversationThread({
               <button
                 onClick={() => {
                   setShowEndConfirmation(false);
-                  if (onEndConversation) {
+                  if (solutionAccepted && onMarkAsSolved) {
+                    onMarkAsSolved();
+                  } else if (onEndConversation) {
                     onEndConversation();
                   }
                 }}
-                className="px-4 py-2 rounded-lg bg-red-600 text-sm text-white transition-colors hover:bg-red-700"
+                className={`px-4 py-2 rounded-lg text-sm text-white transition-colors ${
+                  solutionAccepted
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
                 style={{ fontWeight: 500 }}
               >
-                End Conversation
+                {solutionAccepted ? 'Mark as Solved' : 'End Conversation'}
               </button>
             </div>
           </div>

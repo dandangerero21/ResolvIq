@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { Message, Complaint } from '../../types';
 import { complaintCategoryLabel } from '../../utils/complaintCategoryLabel';
+import { specializationMatchesComplaint } from '../../utils/specializationMatch';
 import { StaffComplaintMobileSidebarPanel } from '../shared/ComplaintMobileSidebarPanels';
 import { ConversationThread } from '../shared/ConversationThread';
 import complaintService from '../../../services/complaintService';
@@ -11,7 +12,8 @@ import userService, { User as StaffMember } from '../../../services/userService'
 import { markConversationAsRead } from '../../../services/conversationUnreadService';
 import { hasAcceptedSolution } from '../../utils/solutionWorkflow';
 import { ArrowLeft, ArrowRightLeft, Calendar, ChevronDown, Lightbulb, Star, Tag, User } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { cn } from '../ui/utils';
 
 const statusConfig: Record<string, any> = {
   'open': { label: 'Pending', className: 'bg-red-50 text-red-600 border border-red-100', dot: 'bg-red-500' },
@@ -35,11 +37,6 @@ const parseSpecializations = (specialization?: string): string[] =>
     .map(spec => spec.trim())
     .filter(spec => spec.length > 0);
 
-const formatTransferTargetOption = (staff: StaffMember): string => {
-  const specs = parseSpecializations(staff.specialization);
-  return specs.length > 0 ? `${staff.name} — ${specs.join(', ')}` : staff.name;
-};
-
 export function StaffComplaintView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -53,6 +50,9 @@ export function StaffComplaintView() {
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [selectedTransferStaffId, setSelectedTransferStaffId] = useState('');
   const [isTransferInProgress, setIsTransferInProgress] = useState(false);
+  const [isTransferDropdownOpen, setIsTransferDropdownOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const transferDropdownRef = useRef<HTMLDivElement | null>(null);
   const solutionAccepted = hasAcceptedSolution(messages);
   const currentStaffId = Number(currentUser?.userId ?? currentUser?.id);
 
@@ -225,6 +225,18 @@ export function StaffComplaintView() {
     }
   };
 
+  const handleMarkAsSolved = async () => {
+    if (!complaint?.complaintId) return;
+    try {
+      await complaintService.updateComplaintStatus(complaint.complaintId, 'resolved');
+      setComplaint(prev => prev ? { ...prev, status: 'resolved', resolvedAt: new Date() } : null);
+      setIsConversationEnded(true);
+    } catch (error) {
+      console.error('Failed to mark as solved:', error);
+      alert('Failed to mark complaint as solved. Please try again.');
+    }
+  };
+
   const handleTransferComplaint = async () => {
     if (!complaint?.complaintId || !Number.isFinite(currentStaffId)) {
       return;
@@ -274,6 +286,17 @@ export function StaffComplaintView() {
     }
   };
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!isTransferDropdownOpen) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const el = transferDropdownRef.current;
+      if (el && !el.contains(e.target as Node)) setIsTransferDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [isTransferDropdownOpen]);
+
   if (isLoading) {
     return (
       <div className="min-h-full flex items-center justify-center">
@@ -295,12 +318,123 @@ export function StaffComplaintView() {
   const selectedTransferTarget = availableTransferTargets.find(
     staff => staff.userId === Number(selectedTransferStaffId)
   );
-  const selectedTransferTargetSpecs = parseSpecializations(selectedTransferTarget?.specialization);
+  const matchingStaff = complaint
+    ? availableTransferTargets.filter(s => specializationMatchesComplaint(s.specialization, complaint))
+    : [];
+  const otherStaff = availableTransferTargets.filter(s => !matchingStaff.includes(s));
   const isCurrentStaffAssignee =
     Number.isFinite(currentStaffId) &&
     complaint.assignedStaffId?.toString() === String(currentStaffId) &&
     !isClosedConversationStatus(complaint.status);
   const canTransferComplaint = isCurrentStaffAssignee && !solutionAccepted;
+
+  const handleSelectTransferStaff = (staffId: number) => {
+    setSelectedTransferStaffId(String(staffId));
+    setIsTransferDropdownOpen(false);
+  };
+
+  /** Renders the staff dropdown (shared by mobile & desktop) */
+  const renderTransferDropdown = () => (
+    <div ref={isTransferDropdownOpen ? transferDropdownRef : undefined} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsTransferDropdownOpen(prev => !prev)}
+        disabled={isTransferInProgress || availableTransferTargets.length === 0}
+        className={cn(
+          'w-full flex items-center justify-between px-3 py-2.5 border rounded-xl text-xs text-left transition-all',
+          selectedTransferTarget
+            ? 'border-violet-400/40 bg-violet-500/10 text-white'
+            : 'border-white/20 bg-white/10 backdrop-blur text-white/60 hover:border-white/40',
+          (isTransferInProgress || availableTransferTargets.length === 0) && 'opacity-50 cursor-not-allowed'
+        )}
+      >
+        <span>{selectedTransferTarget ? selectedTransferTarget.name : 'Select staff member'}</span>
+        <ChevronDown className={cn('w-4 h-4 transition-transform', isTransferDropdownOpen && 'rotate-180')} />
+      </button>
+
+      {isTransferDropdownOpen && (
+        <div className="absolute top-full left-0 right-0 z-[60] mt-1 max-h-72 overflow-y-auto rounded-xl border border-white/20 bg-neutral-950/95 shadow-2xl backdrop-blur-md">
+          {matchingStaff.length > 0 && (
+            <>
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/20 border-b border-amber-500/30">
+                <Star className="w-3 h-3 text-amber-400" />
+                <span className="text-xs text-amber-300" style={{ fontWeight: 500 }}>Recommended</span>
+              </div>
+              {matchingStaff.map(staff => (
+                <button
+                  type="button"
+                  key={staff.userId}
+                  onClick={() => handleSelectTransferStaff(staff.userId)}
+                  className={cn(
+                    'w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors border-b border-white/10',
+                    selectedTransferTarget?.userId === staff.userId
+                      ? 'bg-violet-500/15'
+                      : 'hover:bg-amber-500/10'
+                  )}
+                >
+                  <div className="w-7 h-7 rounded-full bg-amber-500/30 flex items-center justify-center text-amber-300 flex-shrink-0" style={{ fontSize: '11px', fontWeight: 700 }}>
+                    {staff.name.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white truncate" style={{ fontWeight: 500 }}>{staff.name}</p>
+                    {staff.specialization && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {parseSpecializations(staff.specialization).map(spec => (
+                          <span key={spec} className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded">
+                            {spec}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </>
+          )}
+          {otherStaff.length > 0 && matchingStaff.length > 0 && (
+            <div className="px-3 py-2 border-t border-white/10">
+              <span className="text-xs text-white/40">Other staff</span>
+            </div>
+          )}
+          {otherStaff.length > 0 ? (
+            otherStaff.map(staff => (
+              <button
+                type="button"
+                key={staff.userId}
+                onClick={() => handleSelectTransferStaff(staff.userId)}
+                className={cn(
+                  'w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors border-b border-white/10 last:border-0',
+                  selectedTransferTarget?.userId === staff.userId
+                    ? 'bg-violet-500/15'
+                    : 'hover:bg-white/10'
+                )}
+              >
+                <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/60 flex-shrink-0" style={{ fontSize: '11px', fontWeight: 700 }}>
+                  {staff.name.charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-white truncate" style={{ fontWeight: 500 }}>{staff.name}</p>
+                  {staff.specialization && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {parseSpecializations(staff.specialization).map(spec => (
+                        <span key={spec} className="text-xs bg-white/10 text-white/60 px-2 py-0.5 rounded">
+                          {spec}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))
+          ) : matchingStaff.length === 0 ? (
+            <div className="px-3 py-6 text-center">
+              <p className="text-xs text-white/40">No other staff members available</p>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
@@ -320,57 +454,15 @@ export function StaffComplaintView() {
       {isCurrentStaffAssignee && (
         <div className="shrink-0 border-b border-white/10 bg-black px-4 pb-3 md:hidden">
           {canTransferComplaint ? (
-            <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-3">
-              <div className="flex items-center gap-2">
-                <ArrowRightLeft className="h-4 w-4 text-violet-300" />
-                <p className="text-xs text-violet-100" style={{ fontWeight: 600 }}>
-                  Transfer complaint
-                </p>
-              </div>
-              <p className="mt-1 text-[11px] text-violet-100/75">
-                Reassign to another staff member based on specialization.
-              </p>
-              <div className="mt-2 space-y-2">
-                <select
-                  value={selectedTransferStaffId}
-                  onChange={event => setSelectedTransferStaffId(event.target.value)}
-                  className="w-full rounded-lg border border-white/20 bg-black/60 px-3 py-2 text-xs text-white focus:border-violet-400/50 focus:outline-none"
-                  disabled={isTransferInProgress || availableTransferTargets.length === 0}
-                >
-                  {availableTransferTargets.length === 0 && <option value="">No other staff available</option>}
-                  {availableTransferTargets.map(staff => (
-                    <option key={staff.userId} value={String(staff.userId)}>
-                      {formatTransferTargetOption(staff)}
-                    </option>
-                  ))}
-                </select>
-                {selectedTransferTargetSpecs.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedTransferTargetSpecs.map(spec => (
-                      <span
-                        key={spec}
-                        className="rounded-full border border-violet-400/35 bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-100"
-                      >
-                        {spec}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleTransferComplaint}
-                  disabled={
-                    isTransferInProgress ||
-                    availableTransferTargets.length === 0 ||
-                    !selectedTransferStaffId
-                  }
-                  className="w-full rounded-lg bg-violet-600 px-4 py-2 text-xs text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
-                  style={{ fontWeight: 600 }}
-                >
-                  {isTransferInProgress ? 'Transferring…' : 'Transfer'}
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsTransferModalOpen(true)}
+              className="flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-xs text-violet-100 transition-colors hover:bg-violet-500/20 w-full"
+              style={{ fontWeight: 600 }}
+            >
+              <ArrowRightLeft className="h-4 w-4 text-violet-300" />
+              Transfer complaint
+            </button>
           ) : (
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
               <p className="text-xs text-emerald-100" style={{ fontWeight: 600 }}>
@@ -415,7 +507,7 @@ export function StaffComplaintView() {
             <h2 className="text-white" style={{ fontWeight: 700 }}>{complaint.title}</h2>
           </div>
 
-          {(complaint.status === 'Resolved' || complaint.status === 'resolved') && complaint.rating && (
+          {complaint.rating && (
             <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-100 rounded-xl px-3 py-1.5 flex-shrink-0">
               <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
               <span className="text-amber-700 text-sm" style={{ fontWeight: 600 }}>{complaint.rating}/5</span>
@@ -457,56 +549,16 @@ export function StaffComplaintView() {
           )}
 
           {canTransferComplaint && (
-            <div className="mt-2 rounded-xl border border-violet-500/25 bg-violet-500/10 px-4 py-3">
-              <div className="flex items-center gap-2">
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setIsTransferModalOpen(true)}
+                className="flex items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/10 px-4 py-2.5 text-xs text-violet-200 transition-colors hover:bg-violet-500/20"
+                style={{ fontWeight: 600 }}
+              >
                 <ArrowRightLeft className="h-4 w-4 text-violet-300" />
-                <p className="text-xs text-violet-200" style={{ fontWeight: 600 }}>
-                  Transfer complaint
-                </p>
-              </div>
-              <p className="mt-1 text-xs text-violet-100/75">
-                Pass this complaint to another staff member. The customer will be notified that a new staff member is now handling it.
-              </p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                <select
-                  value={selectedTransferStaffId}
-                  onChange={event => setSelectedTransferStaffId(event.target.value)}
-                  className="w-full rounded-lg border border-white/20 bg-black/50 px-3 py-2 text-xs text-white focus:border-violet-400/50 focus:outline-none"
-                  disabled={isTransferInProgress || availableTransferTargets.length === 0}
-                >
-                  {availableTransferTargets.length === 0 && <option value="">No other staff available</option>}
-                  {availableTransferTargets.map(staff => (
-                    <option key={staff.userId} value={String(staff.userId)}>
-                      {formatTransferTargetOption(staff)}
-                    </option>
-                  ))}
-                </select>
-                {selectedTransferTargetSpecs.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 sm:max-w-[60%]">
-                    {selectedTransferTargetSpecs.map(spec => (
-                      <span
-                        key={spec}
-                        className="rounded-full border border-violet-400/35 bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-100"
-                      >
-                        {spec}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleTransferComplaint}
-                  disabled={
-                    isTransferInProgress ||
-                    availableTransferTargets.length === 0 ||
-                    !selectedTransferStaffId
-                  }
-                  className="rounded-lg bg-violet-600 px-4 py-2 text-xs text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
-                  style={{ fontWeight: 600 }}
-                >
-                  {isTransferInProgress ? 'Transferring…' : 'Transfer'}
-                </button>
-              </div>
+                Transfer complaint to another staff
+              </button>
             </div>
           )}
 
@@ -528,12 +580,73 @@ export function StaffComplaintView() {
             messages={messages}
             onSendMessage={handleSendMessage}
             onEndConversation={handleEndConversation}
+            onMarkAsSolved={handleMarkAsSolved}
             isStaff={true}
             isConversationEnded={isConversationEnded}
             solutionAccepted={solutionAccepted}
           />
         </div>
       </div>
+
+      {/* Transfer Modal */}
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/20 bg-neutral-950 p-6 shadow-2xl">
+            <div className="flex items-center gap-2 mb-1">
+              <ArrowRightLeft className="h-5 w-5 text-violet-400" />
+              <h2 className="text-lg text-white" style={{ fontWeight: 700 }}>
+                Transfer Complaint
+              </h2>
+            </div>
+            <p className="text-sm text-white/60 mb-4">
+              Select a staff member to transfer this complaint to. The customer will be notified.
+            </p>
+
+            <div className="space-y-3">
+              {renderTransferDropdown()}
+
+              {selectedTransferTarget && (
+                <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2">
+                  <p className="text-xs text-white/50 mb-1">Transferring to:</p>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-violet-500/30 flex items-center justify-center text-violet-300 flex-shrink-0" style={{ fontSize: '10px', fontWeight: 700 }}>
+                      {selectedTransferTarget.name.charAt(0)}
+                    </div>
+                    <span className="text-sm text-white" style={{ fontWeight: 500 }}>{selectedTransferTarget.name}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 justify-end mt-5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTransferModalOpen(false);
+                  setIsTransferDropdownOpen(false);
+                }}
+                className="px-4 py-2 rounded-lg border border-white/20 text-sm text-white hover:bg-white/10 transition-colors"
+                style={{ fontWeight: 500 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleTransferComplaint();
+                  setIsTransferModalOpen(false);
+                  setIsTransferDropdownOpen(false);
+                }}
+                disabled={isTransferInProgress || !selectedTransferStaffId}
+                className="px-4 py-2 rounded-lg bg-violet-600 text-sm text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ fontWeight: 500 }}
+              >
+                {isTransferInProgress ? 'Transferring…' : 'Confirm Transfer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

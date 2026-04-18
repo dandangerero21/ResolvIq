@@ -1,7 +1,7 @@
 import { Complaint } from '../../types';
 import { complaintCategoryLabel } from '../../utils/complaintCategoryLabel';
 import { cn } from '../ui/utils';
-import { Clock, CheckCircle2, AlertCircle, ChevronRight, Calendar, User, XCircle } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, ChevronRight, Calendar, User, XCircle, ArrowRightLeft } from 'lucide-react';
 import BorderGlow from '../../../components/BorderGlow';
 
 interface ComplaintCardProps {
@@ -14,6 +14,8 @@ interface ComplaintCardProps {
   variant?: 'default' | 'user' | 'staff';
   /** One-shot border sweep on mount (use only for the first card in a list) */
   playIntroGlow?: boolean;
+  /** If set, renders a violet 'Transferred from {name}' badge */
+  transferredByName?: string;
 }
 
 const statusConfig: Record<string, any> = {
@@ -181,6 +183,7 @@ export function ComplaintCard({
   unreadMessageCount = 0,
   variant = 'default',
   playIntroGlow = false,
+  transferredByName,
 }: ComplaintCardProps) {
   const statusMap =
     variant === 'user' ? statusConfigUser : variant === 'staff' ? statusConfigStaff : statusConfig;
@@ -262,6 +265,12 @@ export function ComplaintCard({
               <span className={cn('rounded-full px-2 py-0.5 text-xs', priority.className)}>
                 {complaint.priority || 'Medium'}
               </span>
+              {transferredByName && (
+                <span className="flex items-center gap-1 rounded-full bg-violet-500/20 text-violet-200 border border-violet-500/25 px-2 py-0.5 text-xs">
+                  <ArrowRightLeft className="h-3 w-3" />
+                  Transferred from {transferredByName}
+                </span>
+              )}
             </div>
             <h3 className="truncate text-white" style={{ fontWeight: 600 }}>
               {complaint.title}
@@ -313,7 +322,7 @@ export function ComplaintCard({
             </div>
           )}
 
-          {(complaint.status === 'Resolved' || complaint.status === 'resolved') && complaint.rating && (
+          {complaint.rating && (
             <div className="ml-auto flex items-center gap-0.5">
               {Array.from({ length: 5 }).map((_, i) => (
                 <span

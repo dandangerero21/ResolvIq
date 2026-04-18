@@ -204,9 +204,13 @@ public class UserService {
                 continue;
             }
 
-            complaint.setStatus("cancelled");
-            complaint.setResolvedAt(now);
+            // Only cancel complaints that are not already in a terminal state.
+            if (!isClosedComplaintStatus(complaint.getStatus())) {
+                complaint.setStatus("cancelled");
+                complaint.setResolvedAt(now);
+            }
             complaint.setCreatedBy(null);
+            complaint.setRating(null);
 
             complaintsCreatedByUserById.put(complaint.getComplaintId(), complaint);
             complaintsToPersistById.put(complaint.getComplaintId(), complaint);
@@ -221,6 +225,7 @@ public class UserService {
 
             // Detach one-to-one link before assignment deletion to avoid transient reference issues on flush.
             complaint.setAssignment(null);
+            complaint.setRating(null);
             if (complaint.getAssignmentCount() == null || complaint.getAssignmentCount() < 1) {
                 complaint.setAssignmentCount(1);
             }
@@ -237,6 +242,26 @@ public class UserService {
             complaintsToPersistById.put(complaint.getComplaintId(), complaint);
         }
 
+        // Preserve ratings: instead of deleting, detach the user/staff reference
+        // so the rating score stays visible on the complaint.
+        List<Rating> userRatings = ratingRepository.findByUser(user);
+        for (Rating rating : userRatings) {
+            if (rating != null) {
+                rating.setUser(null);
+            }
+        }
+        List<Rating> staffRatings = ratingRepository.findByStaff(user);
+        for (Rating rating : staffRatings) {
+            if (rating != null) {
+                rating.setStaff(null);
+            }
+        }
+        List<Rating> allAffectedRatings = new ArrayList<>(userRatings);
+        allAffectedRatings.addAll(staffRatings);
+        if (!allAffectedRatings.isEmpty()) {
+            ratingRepository.saveAll(allAffectedRatings);
+        }
+
         if (!complaintsToPersistById.isEmpty()) {
             complaintRepository.saveAll(complaintsToPersistById.values());
         }
@@ -246,21 +271,6 @@ public class UserService {
 
         if (!assignedComplaints.isEmpty()) {
             assignmentRepository.deleteAll(assignedComplaints);
-        }
-
-        List<Rating> ratingsToDelete = new ArrayList<>();
-        ratingsToDelete.addAll(ratingRepository.findByUser(user));
-        ratingsToDelete.addAll(ratingRepository.findByStaff(user));
-        if (!ratingsToDelete.isEmpty()) {
-            Map<Long, Rating> uniqueRatingsById = new LinkedHashMap<>();
-            for (Rating rating : ratingsToDelete) {
-                if (rating != null && rating.getRatingId() != null) {
-                    uniqueRatingsById.put(rating.getRatingId(), rating);
-                }
-            }
-            if (!uniqueRatingsById.isEmpty()) {
-                ratingRepository.deleteAll(uniqueRatingsById.values());
-            }
         }
 
         List<Message> sentMessages = messageRepository.findBySender(user);

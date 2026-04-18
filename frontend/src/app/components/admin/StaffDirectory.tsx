@@ -137,7 +137,7 @@ export function StaffDirectory() {
       const resolved = staffComplaints.filter(isResolvedComplaint);
       const cancelled = staffComplaints.filter(isCancelledComplaint).length;
       const transferred = Number(staff.transferredCount ?? 0);
-      const rated = resolved.filter(c => c.rating);
+      const rated = staffComplaints.filter(c => c.rating);
       const avgRating =
         rated.length > 0
           ? (rated.reduce((s, c) => s + (c.rating ?? 0), 0) / rated.length).toFixed(1)

@@ -128,11 +128,12 @@ export function StaffDashboard() {
   const resolved = assigned.filter(c => c.status === 'Resolved' || c.status === 'resolved');
   const cancelledComplaints = assigned.filter(c => c.status === 'Cancelled' || c.status === 'cancelled');
 
+  const ratedComplaints = assigned.filter(c => c.rating);
   const avgRating =
-    resolved.filter(c => c.rating).length > 0
+    ratedComplaints.length > 0
       ? (
-          resolved.filter(c => c.rating).reduce((sum, c) => sum + (c.rating ?? 0), 0) /
-          resolved.filter(c => c.rating).length
+          ratedComplaints.reduce((sum, c) => sum + (c.rating ?? 0), 0) /
+          ratedComplaints.length
         ).toFixed(1)
       : '—';
 
@@ -337,6 +338,7 @@ export function StaffDashboard() {
                         showUser
                         unreadMessageCount={unreadCounts[complaint.complaintId ?? Number(complaint.id)] ?? 0}
                         playIntroGlow={index === 0}
+                        transferredByName={complaint.transferredByStaffName}
                         onClick={() => navigate(`/staff/complaint/${complaint.id}`)}
                       />
                     </li>

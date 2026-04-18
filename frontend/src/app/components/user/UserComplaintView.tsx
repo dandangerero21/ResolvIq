@@ -132,24 +132,27 @@ export function UserComplaintView() {
           })
         }
         
-        // Try to fetch updated complaint status
-        try {
-          const updatedComplaint = await complaintService.getComplaintById(complaintId);
-          setComplaint(updatedComplaint);
+        // Skip complaint re-fetch while the rating screen is active, so we don't
+        // overwrite assignedStaffId (which would hide the rating form).
+        if (!showRating) {
+          try {
+            const updatedComplaint = await complaintService.getComplaintById(complaintId);
+            setComplaint(updatedComplaint);
           
-          // Closed on the server — attribute to user only if they used "End conversation" (see sessionStorage).
-          if (isClosedConversationStatus(updatedComplaint.status) && !isConversationEnded) {
-            setIsConversationEnded(true);
-            if (updatedComplaint.status?.toLowerCase() === 'cancelled') {
-              setConversationEndedBy('staff');
-            } else {
-              const key = `complaint-ended-by-${complaintId}`;
-              setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+            // Closed on the server — attribute to user only if they used "End conversation" (see sessionStorage).
+            if (isClosedConversationStatus(updatedComplaint.status) && !isConversationEnded) {
+              setIsConversationEnded(true);
+              if (updatedComplaint.status?.toLowerCase() === 'cancelled') {
+                setConversationEndedBy('staff');
+              } else {
+                const key = `complaint-ended-by-${complaintId}`;
+                setConversationEndedBy(sessionStorage.getItem(key) === 'user' ? 'user' : 'staff');
+              }
             }
+          } catch (complaintError) {
+            // Log but don't crash - complaint might not exist in backend yet
+            console.debug('Could not fetch updated complaint status:', complaintError);
           }
-        } catch (complaintError) {
-          // Log but don't crash - complaint might not exist in backend yet
-          console.debug('Could not fetch updated complaint status:', complaintError);
         }
       } catch (error) {
         console.error('Failed to load messages:', error);
@@ -163,7 +166,7 @@ export function UserComplaintView() {
     const interval = setInterval(fetchData, 2000);
 
     return () => clearInterval(interval);
-  }, [complaint?.complaintId, isConversationEnded, currentUser?.userId, currentUser?.id]);
+  }, [complaint?.complaintId, isConversationEnded, showRating, currentUser?.userId, currentUser?.id]);
 
   // This effect is no longer needed - we don't use the solution dialog anymore
 
@@ -351,6 +354,20 @@ export function UserComplaintView() {
     }
   };
 
+  const handleMarkAsSolved = async () => {
+    if (!complaint?.complaintId) return;
+    try {
+      await complaintService.updateComplaintStatus(complaint.complaintId, 'resolved');
+      setComplaint(prev => (prev ? { ...prev, status: 'resolved', resolvedAt: new Date() } : prev));
+      setConversationEndedBy('user');
+      setIsConversationEnded(true);
+      setShowRating(hasAssignedStaff);
+    } catch (error) {
+      console.error('Failed to mark as solved:', error);
+      alert('Failed to mark complaint as solved. Please try again.');
+    }
+  };
+
   if (!complaint) {
     return (
       <div className="min-h-full flex items-center justify-center">
@@ -524,6 +541,7 @@ export function UserComplaintView() {
               messages={messages}
               onSendMessage={handleSendMessage}
               onEndConversation={handleEndConversation}
+              onMarkAsSolved={handleMarkAsSolved}
               onSolutionAccepted={handleSolutionAccepted}
               onSolutionRejected={handleSolutionRejected}
               isConversationEnded={isConversationEnded}
