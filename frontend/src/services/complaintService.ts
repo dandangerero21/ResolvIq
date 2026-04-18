@@ -10,6 +10,11 @@ const normalizeComplaint = (complaint: any): Complaint => {
     customCategory: complaint.customCategory ?? complaint.custom_category ?? undefined,
     categoryName: complaint.categoryName ?? complaint.category_name ?? undefined,
     ratingFeedback: complaint.ratingFeedback ?? complaint.rating_feedback ?? undefined,
+    assignmentCount: complaint.assignmentCount ?? complaint.assignment_count ?? 0,
+    reassignmentCount: complaint.reassignmentCount ?? complaint.reassignment_count ?? 0,
+    transferCount: complaint.transferCount ?? complaint.transfer_count ?? 0,
+    transferredByStaffId: complaint.transferredByStaffId ?? complaint.transferred_by_staff_id ?? undefined,
+    transferredByStaffName: complaint.transferredByStaffName ?? complaint.transferred_by_staff_name ?? undefined,
   }
 }
 

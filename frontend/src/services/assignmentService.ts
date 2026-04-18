@@ -16,6 +16,17 @@ const assignmentService = {
     return response.data
   },
 
+  transferComplaint: async (
+    complaintId: number,
+    fromStaffId: number,
+    toStaffId: number
+  ): Promise<Assignment> => {
+    const response = await api.post('/assignments/transfer', {}, {
+      params: { complaintId, fromStaffId, toStaffId }
+    })
+    return response.data
+  },
+
   getStaffAssignments: async (staffId: number): Promise<Assignment[]> => {
     const response = await api.get(`/assignments/staff/${staffId}`)
     return response.data

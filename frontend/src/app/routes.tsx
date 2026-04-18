@@ -4,6 +4,7 @@ import { Signup } from './components/auth/Signup';
 import { ResetPasswordConfirm } from './components/auth/ResetPasswordConfirm';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/shared/Layout';
+import { AccountSettings } from './components/shared/AccountSettings';
 import { UserDashboard } from './components/user/UserDashboard';
 import { SubmitComplaint } from './components/user/SubmitComplaint';
 import { UserComplaintView } from './components/user/UserComplaintView';
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
       { path: 'dashboard', element: <UserDashboard /> },
       { path: 'submit', element: <SubmitComplaint /> },
       { path: 'complaint/:id', element: <UserComplaintView /> },
+      { path: 'settings', element: <AccountSettings /> },
     ],
   },
   // Staff routes
@@ -60,6 +62,7 @@ export const router = createBrowserRouter([
       { path: 'dashboard', element: <StaffDashboard /> },
       { path: 'complaint/:id', element: <StaffComplaintView /> },
       { path: 'history', element: <StaffHistory /> },
+      { path: 'settings', element: <AccountSettings /> },
     ],
   },
   // Admin routes

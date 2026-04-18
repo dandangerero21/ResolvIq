@@ -12,6 +12,7 @@ import java.util.Optional;
 public interface StaffApplicationRepository extends JpaRepository<StaffApplication, Long> {
 
     Optional<StaffApplication> findByEmail(String email);
+    Optional<StaffApplication> findByEmailIgnoreCase(String email);
 
     List<StaffApplication> findByStatusOrderByCreatedAtAsc(StaffApplicationStatus status);
 }

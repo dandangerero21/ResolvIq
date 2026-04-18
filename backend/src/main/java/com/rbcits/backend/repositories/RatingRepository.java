@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 public interface RatingRepository extends JpaRepository<Rating, Long> {
 
 	List<Rating> findByStaff(User staff);
+	List<Rating> findByUser(User user);
 	Optional<Rating> findByComplaint(Complaint complaint);
 
 	List<Rating> findByScoreBetweenOrderByRatingIdDesc(int minScore, int maxScore, Pageable pageable);

@@ -12,4 +12,5 @@ import java.util.Optional;
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
     Optional<PasswordResetToken> findByToken(String token);
     List<PasswordResetToken> findByUserAndUsedAtIsNull(User user);
+    List<PasswordResetToken> findByUser(User user);
 }

@@ -16,6 +16,7 @@ export interface SignupRequest {
 
 export interface AuthResponse extends User {
   userId: number
+  token?: string
 }
 
 interface SimpleMessageResponse {
@@ -32,13 +33,21 @@ export interface RegistrationResult {
 const authService = {
   login: async (email: string, password: string): Promise<AuthResponse> => {
     try {
-      const response = await api.post('/users/login', {
+      const response = await api.post<AuthResponse>('/users/login', {
         email,
         password,
       })
+
+      const { token, ...userWithoutToken } = response.data
+      if (token) {
+        authService.setToken(token)
+      } else {
+        localStorage.removeItem('token')
+      }
+
       // Store user in localStorage immediately after login
-      authService.setUser(response.data)
-      return response.data
+      authService.setUser(userWithoutToken as AuthResponse)
+      return userWithoutToken as AuthResponse
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Login failed')
     }

@@ -6,6 +6,7 @@ export interface User {
   email: string;
   role: 'user' | 'staff' | 'admin';
   specialization?: string;
+  transferredCount?: number;
 }
 
 const userService = {
@@ -33,6 +34,17 @@ const userService = {
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to fetch user');
+    }
+  },
+
+  deleteAccount: async (userId: number, confirmationText: string): Promise<string> => {
+    try {
+      const response = await api.delete<{ message: string }>(`/users/${userId}`, {
+        data: { confirmationText },
+      });
+      return response.data.message;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to delete account');
     }
   },
 };

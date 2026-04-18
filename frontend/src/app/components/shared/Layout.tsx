@@ -14,6 +14,7 @@ import {
   ChevronRight,
   History,
   ShieldAlert,
+  Settings,
   Menu,
   X,
 } from 'lucide-react';
@@ -22,11 +23,13 @@ import { cn } from '../ui/utils';
 const userNav = [
   { to: '/user/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/user/submit', icon: PlusCircle, label: 'Submit Complaint' },
+  { to: '/user/settings', icon: Settings, label: 'Settings' },
 ];
 
 const staffNav = [
   { to: '/staff/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/staff/history', icon: History, label: 'Resolution History' },
+  { to: '/staff/settings', icon: Settings, label: 'Settings' },
 ];
 
 const adminNav = [

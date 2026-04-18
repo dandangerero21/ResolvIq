@@ -26,6 +26,13 @@ public class AssignmentController {
         return assignmentService.assignComplaint(complaintId, staffId);
     }
 
+    @PostMapping("/transfer")
+    public AssignmentDTO transferComplaint(@RequestParam Long complaintId,
+                                           @RequestParam Long fromStaffId,
+                                           @RequestParam Long toStaffId) {
+        return assignmentService.transferComplaint(complaintId, fromStaffId, toStaffId);
+    }
+
     @GetMapping("/staff/{staffId}")
     public List<AssignmentDTO> getStaffAssignments(@PathVariable Long staffId) {
         return assignmentService.getStaffAssignments(staffId);

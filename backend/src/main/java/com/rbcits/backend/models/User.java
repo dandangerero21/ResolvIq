@@ -32,6 +32,9 @@ public class User {
     @Nullable
     @Column(columnDefinition = "TEXT")
     private String specialization; // Can contain multiple specializations separated by commas (e.g., "Technical Support, Billing")
+
+    @Column(name = "transferred_count", nullable = false)
+    private Integer transferredCount = 0;
     
     @OneToMany(mappedBy = "createdBy")
     @JsonManagedReference
