@@ -10,8 +10,14 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
 @Component
 public class DataInitializer implements CommandLineRunner {
+
+    private static final String DEFAULT_ADMIN_EMAIL_B64 = "YWRtaW5AZXhhbXBsZS5jb20=";
+    private static final String DEFAULT_ADMIN_PASSWORD_B64 = "YWRtaW4xMjM=";
 
     private final UserRepository userRepository;
     private final SpecializationRepository specializationRepository;
@@ -62,15 +68,26 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         // Create admin user if not exists
-        if (userRepository.findByEmail("admin@example.com").isEmpty()) {
+        String adminEmail = getSeedValue("APP_SEED_ADMIN_EMAIL", DEFAULT_ADMIN_EMAIL_B64);
+        String adminPassword = getSeedValue("APP_SEED_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD_B64);
+
+        if (userRepository.findByEmail(adminEmail).isEmpty()) {
             User admin = new User();
             admin.setName("Administrator");
-            admin.setEmail("admin@example.com");
-            admin.setPassword(passwordEncoder.encode("admin123"));
+            admin.setEmail(adminEmail);
+            admin.setPassword(passwordEncoder.encode(adminPassword));
             admin.setRole("admin");
             admin.setSpecialization(null);
             userRepository.save(admin);
-            System.out.println("Admin user created: admin@example.com / admin123");
+            System.out.println("Admin user created from seed configuration");
         }
+    }
+
+    private String getSeedValue(String envKey, String fallbackBase64) {
+        String envValue = System.getenv(envKey);
+        if (envValue != null && !envValue.isBlank()) {
+            return envValue.trim();
+        }
+        return new String(Base64.getDecoder().decode(fallbackBase64), StandardCharsets.UTF_8);
     }
 }
