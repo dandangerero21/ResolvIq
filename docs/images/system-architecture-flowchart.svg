@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1080" viewBox="0 0 1900 1080" role="img" aria-label="ResolvIQ system architecture flowchart">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e293b"/>
+    </marker>
+    <style>
+      .bg { fill: #f5f7fb; }
+      .title { font-family: Segoe UI, Arial, sans-serif; font-size: 32px; font-weight: 700; fill: #1f2937; }
+      .lane-title { font-family: Segoe UI, Arial, sans-serif; font-size: 22px; font-weight: 700; fill: #1e293b; }
+      .lane { stroke: #4b5d7a; stroke-width: 2.5; rx: 16; ry: 16; }
+      .frontend-lane { fill: #eaf8ff; }
+      .backend-lane { fill: #edf3ff; }
+      .infra-lane { fill: #f8f8e8; }
+      .box { fill: #ffffff; stroke: #4f6486; stroke-width: 2.3; rx: 12; ry: 12; }
+      .box-title { font-family: Segoe UI, Arial, sans-serif; font-size: 16px; font-weight: 600; fill: #334155; }
+      .box-sub { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; font-weight: 600; fill: #334155; }
+      .line { stroke: #1e293b; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .edge { font-family: Segoe UI, Arial, sans-serif; font-size: 12px; font-weight: 600; fill: #334155; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1900" height="1080"/>
+  <text class="title" x="950" y="62" text-anchor="middle">ResolvIQ System Architecture Flowchart</text>
+
+  <rect class="lane frontend-lane" x="70" y="120" width="450" height="900"/>
+  <text class="lane-title" x="295" y="165" text-anchor="middle">Frontend Layer</text>
+
+  <rect class="lane backend-lane" x="560" y="120" width="860" height="900"/>
+  <text class="lane-title" x="990" y="165" text-anchor="middle">Backend Layer</text>
+
+  <rect class="lane infra-lane" x="1460" y="120" width="370" height="900"/>
+  <text class="lane-title" x="1645" y="165" text-anchor="middle">Infrastructure Layer</text>
+
+  <rect class="box" x="130" y="230" width="320" height="120"/>
+  <text class="box-title" x="290" y="273" text-anchor="middle">React + TypeScript SPA</text>
+  <text class="box-sub" x="290" y="315" text-anchor="middle">(User, Staff, Admin UI)</text>
+
+  <rect class="box" x="130" y="410" width="320" height="110"/>
+  <text class="box-title" x="290" y="453" text-anchor="middle">Route Protection +</text>
+  <text class="box-sub" x="290" y="493" text-anchor="middle">State Management</text>
+
+  <rect class="box" x="130" y="590" width="320" height="110"/>
+  <text class="box-title" x="290" y="633" text-anchor="middle">Axios Service Layer</text>
+  <text class="box-sub" x="290" y="673" text-anchor="middle">(API Client)</text>
+
+  <rect class="box" x="620" y="230" width="320" height="110"/>
+  <text class="box-title" x="780" y="273" text-anchor="middle">Security + Auth</text>
+  <text class="box-sub" x="780" y="313" text-anchor="middle">(Tokens, Validation)</text>
+
+  <rect class="box" x="980" y="230" width="360" height="110"/>
+  <text class="box-title" x="1160" y="273" text-anchor="middle">Spring Boot</text>
+  <text class="box-sub" x="1160" y="313" text-anchor="middle">REST Controllers</text>
+
+  <rect class="box" x="620" y="430" width="320" height="110"/>
+  <text class="box-title" x="780" y="473" text-anchor="middle">Service Layer</text>
+  <text class="box-sub" x="780" y="513" text-anchor="middle">(Business Rules)</text>
+
+  <rect class="box" x="980" y="430" width="360" height="110"/>
+  <text class="box-title" x="1160" y="473" text-anchor="middle">Domain Workflows</text>
+  <text class="box-sub" x="1160" y="513" text-anchor="middle">(Complaints, Assignments)</text>
+
+  <rect class="box" x="620" y="650" width="320" height="110"/>
+  <text class="box-title" x="780" y="693" text-anchor="middle">Notification Service</text>
+  <text class="box-sub" x="780" y="733" text-anchor="middle">(Email Trigger Logic)</text>
+
+  <rect class="box" x="980" y="650" width="360" height="110"/>
+  <text class="box-title" x="1160" y="693" text-anchor="middle">Spring Data JPA</text>
+  <text class="box-sub" x="1160" y="733" text-anchor="middle">Repositories</text>
+
+  <rect class="box" x="1515" y="270" width="260" height="130"/>
+  <text class="box-title" x="1645" y="318" text-anchor="middle">Relational Database</text>
+  <text class="box-sub" x="1645" y="362" text-anchor="middle">H2 (Dev) / PostgreSQL</text>
+
+  <rect class="box" x="1515" y="650" width="260" height="130"/>
+  <text class="box-title" x="1645" y="698" text-anchor="middle">Postmark HTTP API</text>
+  <text class="box-sub" x="1645" y="742" text-anchor="middle">Transactional Emails</text>
+
+  <line class="line" x1="290" y1="350" x2="290" y2="410"/>
+  <line class="line" x1="290" y1="520" x2="290" y2="590"/>
+
+  <path class="line" d="M450 645 L550 645 L550 285 L620 285"/>
+  <line class="line" x1="940" y1="285" x2="980" y2="285"/>
+
+  <line class="line" x1="780" y1="340" x2="780" y2="430"/>
+  <line class="line" x1="1160" y1="340" x2="1160" y2="430"/>
+  <line class="line" x1="940" y1="485" x2="980" y2="485"/>
+
+  <line class="line" x1="780" y1="540" x2="780" y2="650"/>
+  <line class="line" x1="1160" y1="540" x2="1160" y2="650"/>
+
+  <path class="line" d="M1340 675 L1450 675 L1450 335 L1515 335"/>
+  <path class="line" d="M780 760 L780 845 L1490 845 L1490 715 L1515 715"/>
+
+  <text class="edge" x="565" y="616">REST API calls</text>
+  <text class="edge" x="955" y="220">auth and token checks</text>
+  <text class="edge" x="955" y="414">business rule execution</text>
+  <text class="edge" x="1220" y="620">CRUD and queries</text>
+  <text class="edge" x="1080" y="862">transactional email delivery</text>
+</svg>

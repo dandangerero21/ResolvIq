@@ -1,321 +1,309 @@
 # Backend-Frontend Integration Guide
 
-## What's Been Implemented
+## Status
 
-### ✅ Backend (Java Spring Boot)
+This guide reflects the current integration state in this repository as of April 2026.
 
-#### New DTOs Created:
-- `ComplaintDTO` - Complaint data structure
-- `MessageDTO` - Message/conversation data
-- `AssignmentDTO` - Staff assignment data
-- `CategoryDTO` - Complaint category data
-- `RatingDTO` - Rating/feedback data
+## Current Stack
 
-#### New Services Created:
-- `ComplaintService` - CRUD operations for complaints
-- `MessageService` - Message/conversation management
-- `AssignmentService` - Assign staff to complaints
-- `CategoryService` - Category management
-- `RatingService` - Rating and feedback management
-- `DataInitializer` - Automatically creates admin user on startup
+- Backend: Spring Boot 4, Java 21, Spring Data JPA, Spring Security, BCrypt
+- Frontend: React 19, TypeScript, Vite, Axios
+- Database: H2 in-memory for local development, PostgreSQL in production profile
 
-#### New REST Controllers Created:
-- `ComplaintController` - `/api/complaints` endpoints
-- `MessageController` - `/api/messages` endpoints
-- `AssignmentController` - `/api/assignments` endpoints
-- `CategoryController` - `/api/categories` endpoints
-- `RatingController` - `/api/ratings` endpoints
-- `UserController` - Updated with CORS support
+## What Is Integrated
 
-#### Updated UserController Features:
-- Proper signup with role validation (only 'user' or 'staff' can register)
-- Staff members must provide specialization during signup
-- Admin account auto-created: `admin@example.com` / `admin123`
+### Backend
 
----
+- User registration/login with signed token response
+- Password reset flow with one-time reset tokens
+- Account deletion flow with bearer token verification and confirmation phrase
+- Complaint CRUD with priority, status tracking, custom category support, and assignment counters
+- Message threads with solution proposals and system messages
+- Assignment workflow including reassignment and staff-initiated transfer
+- Ratings with update-if-existing behavior and public testimonial feed
+- Staff application workflow (pending, approve, reject)
+- Specialization CRUD and category CRUD
+- Startup seed data for categories, specializations, and a default admin user
 
-### ✅ Frontend (React + Vite)
+### Frontend
 
-#### New Services Created:
-- `services/api.ts` - Axios client with request/response interceptors
-  - Auto-attaches JWT token to requests
-  - Handles 401 errors (token expiry)
-- `services/authService.ts` - Authentication operations (login, signup, token management)
-- `services/complaintService.ts` - Complaint CRUD operations
-- `services/messageService.ts` - Message operations
-- `services/assignmentService.ts` - Assignment operations
-- `services/categoryService.ts` - Category operations
-- `services/ratingService.ts` - Rating operations
+- Axios API client with:
+    - `Authorization: Bearer <token>` request interceptor
+    - automatic local logout on HTTP 401
+- Service-layer integration for:
+    - auth and password reset
+    - users and account deletion
+    - complaints, messages, assignments, ratings
+    - categories, specializations, staff applications
+- Signup flow aligned with backend registration outcomes:
+    - `user_registered`
+    - `staff_application_submitted`
 
-#### New Components Created:
-- `components/ProtectedRoute.tsx` - Route guard based on user role
-- `components/auth/Signup.tsx` - Complete signup flow with role selection
+## Run Locally
 
-#### Updated Components:
-- `context/AuthContext.tsx` - Added token persistence & localStorage
-- `components/auth/Login.tsx` - Real backend authentication
-- `components/shared/Layout.tsx` - Updated logout redirect
-- `app/types.ts` - Updated type definitions to match backend
-- `routes.tsx` - Added protected routes & signup route
-- `package.json` - Added axios dependency
+### Prerequisites
 
----
-
-## How to Run
-
-### Prerequisites:
-- Java 25+
-- Maven
+- Java 21+
 - Node.js 18+
 - npm
 
-### 1. Start the Backend
+### 1) Start backend
 
 ```bash
 cd backend
-mvn spring-boot:run
+./mvnw.cmd spring-boot:run   # Windows
+# ./mvnw spring-boot:run     # macOS/Linux
 ```
 
-The backend will start on **http://localhost:8080**
+Backend default URL: http://localhost:8080
 
-#### Admin Credentials:
-- Email: `admin@example.com`
-- Password: `admin123`
-
----
-
-### 2. Install Frontend Dependencies
+### 2) Start frontend
 
 ```bash
 cd frontend
 npm install
-```
-
----
-
-### 3. Start the Frontend Dev Server
-
-```bash
 npm run dev
 ```
 
-The frontend will start on **http://localhost:5173**
+Frontend default URL: http://localhost:5173
 
----
+API base URL behavior:
 
-## Authentication Flow
+- If `VITE_API_URL` is set, frontend uses it
+- If not set:
+    - dev: `http://localhost:8080/api`
+    - production build: `/api`
+
+## Authentication and Account Lifecycle
 
 ### Login
-1. User enters email and password
-2. Frontend sends `POST /api/users/login` to backend
-3. Backend validates credentials and returns user data
-4. User is redirected to their role-specific dashboard
+
+1. Frontend sends `POST /api/users/login`.
+2. Backend validates credentials and returns user payload plus token.
+3. Frontend stores token/user in localStorage.
 
 ### Signup
-1. User enters name, email, password
-2. User selects role (User or Staff)
-3. If Staff, user must enter specialization
-4. Frontend sends `POST /api/users/register` to backend
-5. Backend validates (no duplicate emails, specialization required for staff)
-6. User is automatically logged in and redirected to dashboard
 
----
+1. Frontend sends `POST /api/users/register`.
+2. Backend returns `RegistrationResponse`:
+     - `user_registered` for regular users
+     - `staff_application_submitted` for staff signups
+3. Signup does not create an authenticated session; user signs in afterward.
 
-## API Endpoints Overview
+### Staff onboarding
 
-### Authentication
-- `POST /api/users/login` - Login with email & password
-- `POST /api/users/register` - Register new user/staff
-- `GET /api/users` - Get all users
+1. Staff signup creates/updates a row in `staff_applications` with `PENDING` status.
+2. Admin reviews via staff application endpoints.
+3. Approve creates a real `users` row with role `staff`.
+
+### Password reset
+
+1. `POST /api/users/password-reset/request`
+2. `GET /api/users/password-reset/validate?token=...`
+3. `POST /api/users/password-reset/complete`
+
+### Account deletion
+
+- Endpoint: `DELETE /api/users/{userId}`
+- Requires bearer token and exact confirmation text:
+    - `Yes, I want to delete my account.`
+- Backend closes or detaches related records as needed (assignments/messages/ratings/reset tokens).
+
+## API Endpoints (Current)
+
+### Users and auth
+
+- `POST /api/users/register`
+- `POST /api/users/login`
+- `POST /api/users/password-reset/request`
+- `GET /api/users/password-reset/validate?token=...`
+- `POST /api/users/password-reset/complete`
+- `DELETE /api/users/{userId}`
+- `GET /api/users`
+
+### Staff applications
+
+- `GET /api/staff-applications/pending`
+- `POST /api/staff-applications/{id}/approve`
+- `POST /api/staff-applications/{id}/reject`
 
 ### Complaints
-- `POST /api/complaints` - Create complaint
-- `GET /api/complaints` - Get all complaints
-- `GET /api/complaints/{id}` - Get specific complaint
-- `GET /api/complaints/user/{userId}` - Get user's complaints
-- `GET /api/complaints/status/{status}` - Filter by status
-- `PUT /api/complaints/{id}/status` - Update status
-- `DELETE /api/complaints/{id}` - Delete complaint
+
+- `POST /api/complaints?userId=...`
+- `GET /api/complaints`
+- `GET /api/complaints/{id}`
+- `GET /api/complaints/user/{userId}`
+- `GET /api/complaints/status/{status}`
+- `PUT /api/complaints/{id}/status?status=...`
+- `DELETE /api/complaints/{id}`
 
 ### Messages
-- `POST /api/messages` - Create message
-- `GET /api/messages/complaint/{complaintId}` - Get conversation thread
-- `PUT /api/messages/{id}/solved` - Mark as solved
-- `DELETE /api/messages/{id}` - Delete message
+
+- `POST /api/messages?complaintId=...&userId=...`
+- `GET /api/messages/complaint/{complaintId}`
+- `PUT /api/messages/{id}/solved`
+- `DELETE /api/messages/{id}`
+- `POST /api/messages/{complaintId}/solution-rejected`
+- `POST /api/messages/{complaintId}/solution-accepted`
 
 ### Assignments
-- `POST /api/assignments` - Assign staff to complaint
-- `GET /api/assignments/staff/{staffId}` - Get staff's assignments
-- `GET /api/assignments/complaint/{complaintId}` - Get complaint's assignment
-- `DELETE /api/assignments/{id}` - Remove assignment
+
+- `POST /api/assignments?complaintId=...&staffId=...`
+- `POST /api/assignments/transfer?complaintId=...&fromStaffId=...&toStaffId=...`
+- `GET /api/assignments/staff/{staffId}`
+- `GET /api/assignments/complaint/{complaintId}`
+- `DELETE /api/assignments/{id}`
 
 ### Categories
-- `POST /api/categories` - Create category
-- `GET /api/categories` - Get all categories
-- `GET /api/categories/{id}` - Get specific category
-- `PUT /api/categories/{id}` - Update category
-- `DELETE /api/categories/{id}` - Delete category
+
+- `POST /api/categories`
+- `GET /api/categories`
+- `GET /api/categories/{id}`
+- `PUT /api/categories/{id}`
+- `DELETE /api/categories/{id}`
+
+### Specializations
+
+- `GET /api/specializations`
+- `GET /api/specializations/{id}`
+- `POST /api/specializations`
+- `PUT /api/specializations/{id}`
+- `DELETE /api/specializations/{id}`
 
 ### Ratings
-- `POST /api/ratings` - Create rating
-- `GET /api/ratings/staff/{staffId}` - Get staff's ratings
-- `GET /api/ratings/complaint/{complaintId}` - Get complaint's rating
-- `DELETE /api/ratings/{id}` - Delete rating
 
----
+- `POST /api/ratings?complaintId=...&staffId=...&userId=...&score=...&feedback=...`
+- `GET /api/ratings/public?limit=...`
+- `GET /api/ratings/staff/{staffId}`
+- `GET /api/ratings/complaint/{complaintId}`
+- `DELETE /api/ratings/{id}`
 
-## Key Features
+## Security Notes
 
-✅ **Proper Authentication**
-- Real email/password validation
-- Token-based (localStorage storage)
-- Auto-logout on token expiry
+- Frontend stores and sends bearer tokens for authenticated actions.
+- Backend security configuration is currently permit-all for API routes.
+- Application-level token validation is enforced in account deletion flow.
+- Plan to add stricter endpoint authorization rules before production hardening.
 
-✅ **Role-Based Access Control**
-- Route guards prevent direct URL access
-- Users see only their role's dashboard
-- Admin-only endpoints protected
+## Database Schema (Current JPA Entities)
 
-✅ **Complete CRUD Operations**
-- All complaint operations integrated
-- Message threads supported
-- Staff assignment workflow
-- Rating system for feedback
+The schema is code-first via JPA (`ddl-auto=update`) and is created/updated automatically.
 
-✅ **Data Persistence**
-- H2 in-memory database (can be switched to MySQL/PostgreSQL)
-- All data persisted on backend
-- Frontend uses real API calls (no mock data)
+```text
+users
+|- user_id (PK)
+|- name
+|- email
+|- password
+|- role
+|- specialization (TEXT)
+`- transferred_count (default 0)
 
----
+categories
+|- category_id (PK)
+`- name
 
-## Testing the Application
+complaint
+|- complaint_id (PK)
+|- title
+|- description (TEXT)
+|- status
+|- priority
+|- created_at
+|- updated_at
+|- resolved_at
+|- assignment_count
+|- reassignment_count
+|- transfer_count
+|- transferred_by_staff_id
+|- transferred_by_staff_name
+|- custom_category
+|- user_id (FK -> users.user_id)
+`- category_id (FK -> categories.category_id)
 
-### Test Account 1: Admin
-```
-Email: admin@example.com
-Password: admin123
-```
+messages
+|- message_id (PK)
+|- content
+|- is_solved
+|- is_solution_proposal
+|- is_system_message
+|- timestamp
+|- complaint_id (FK -> complaint.complaint_id)
+`- user_id (FK -> users.user_id, nullable for system messages)
 
-### Test Account 2: Create as User
-1. Go to `/signup`
-2. Enter details
-3. Select "Regular User" role
-4. Create account and login
+assignments
+|- assignment_id (PK)
+|- complaint_id (FK -> complaint.complaint_id, unique)
+`- user_id (FK -> users.user_id)
 
-### Test Account 3: Create as Staff
-1. Go to `/signup`
-2. Enter details
-3. Select "Staff Member" role
-4. Enter specialization (e.g., "Technical Support")
-5. Create account and login
+ratings
+|- rating_id (PK)
+|- score
+|- feedback
+|- complaint_id (FK -> complaint.complaint_id, unique)
+|- staff_id (FK -> users.user_id)
+`- user_id (FK -> users.user_id)
 
----
+password_reset_tokens
+|- token_id (PK)
+|- token (unique)
+|- user_id (FK -> users.user_id)
+|- created_at
+|- expires_at
+`- used_at
 
-## Common Issues & Solutions
+specializations
+|- specialization_id (PK)
+|- name (unique)
+`- description
 
-### Issue: "Could not resolve entry module"
-**Solution**: We created `index.html` and `src/main.tsx` to resolve this.
-
-### Issue: Login not working
-**Solution**: Make sure backend is running on port 8080. Check backend logs for errors.
-
-### Issue: axios not found
-**Solution**: Run `npm install` in the frontend directory.
-
-### Issue: Admin account not created
-**Solution**: Backend creates admin on startup. Check that Spring Boot logs show "Admin user created".
-
----
-
-## Next Steps
-
-1. **Integrate Dashboard Components** - Update UserDashboard, StaffDashboard, AdminDashboard to use API services instead of mock data
-2. **Error Handling** - Add global error handler for API failures
-3. **Loading States** - Add loading indicators during API calls
-4. **Form Validation** - Enhanced validation on both client and server
-5. **Pagination** - Add pagination for large data sets
-6. **Search & Filters** - Implement advanced filtering
-7. **Real-time Updates** - Consider WebSockets for live notifications
-
----
-
-## Database Schema
-
-The backend uses H2 (in-memory) with the following tables:
-
-```
-users table
-├── user_id (PK)
-├── name
-├── email
-├── password (hashed)
-├── role (user/staff/admin)
-└── specialization (for staff)
-
-complaint table
-├── complaint_id (PK)
-├── title
-├── description
-├── status (open/assigned/resolved)
-├── user_id (FK to users)
-└── category_id (FK to categories)
-
-messages table
-├── message_id (PK)
-├── content
-├── is_solved
-├── timestamp
-├── complaint_id (FK to complaint)
-└── user_id (FK to users)
-
-assignments table
-├── assignment_id (PK)
-├── complaint_id (FK to complaint - unique)
-└── user_id (FK to users - assigned staff)
-
-categories table
-├── category_id (PK)
-└── name
-
-ratings table
-├── rating_id (PK)
-├── score (1-5)
-├── feedback
-├── complaint_id (FK to complaint - unique)
-├── staff_id (FK to users)
-└── user_id (FK to users)
+staff_applications
+|- id (PK)
+|- email (unique)
+|- name
+|- password
+|- specialization (TEXT)
+|- status (PENDING|APPROVED|REJECTED)
+|- created_at
+|- reviewed_at
+|- reviewed_by_user_id
+`- admin_note
 ```
 
----
+## Relationship Overview
 
-## Architecture Overview
-
-```
-Frontend (React/Vite)
-    ↓
-    ├─ services/api.ts (Axios client with interceptors)
-    ├─ services/authService.ts (Login/Signup)
-    ├─ services/*Service.ts (CRUD operations)
-    └─ components/ (Protected Routes)
-    
-Backend (Spring Boot)
-    ↓
-    ├─ controllers/ (REST endpoints)
-    ├─ services/ (Business logic)
-    ├─ repositories/ (Database access)
-    ├─ models/ (JPA entities)
-    └─ DTOs/ (Data transfer objects)
-    
-Database (H2 in-memory)
-    ├─ users
-    ├─ complaints
-    ├─ messages
-    ├─ assignments
-    ├─ categories
-    └─ ratings
+```text
+users (1) ---- (many) complaint      via complaint.user_id
+categories (1) ---- (many) complaint via complaint.category_id
+complaint (1) ---- (many) messages   via messages.complaint_id
+users (1) ---- (many) messages       via messages.user_id
+complaint (1) ---- (0..1) assignments via assignments.complaint_id UNIQUE
+users (1) ---- (many) assignments    via assignments.user_id
+complaint (1) ---- (0..1) ratings    via ratings.complaint_id UNIQUE
+users (1) ---- (many) ratings        via ratings.staff_id and ratings.user_id
+users (1) ---- (many) password_reset_tokens via password_reset_tokens.user_id
 ```
 
----
+## Seed Data and Initialization
 
-**All CRUD operations are now integrated with the backend!** 🎉
+On startup, initializer logic seeds when missing:
+
+- Default categories (including `Other`)
+- Default specializations
+- Default admin user:
+    - Email: `admin@example.com`
+    - Password: `admin123`
+
+## Integration Notes
+
+- Complaint creation requires `customCategory` when category `Other` is selected.
+- Staff transfer/reassignment updates complaint counters and inserts system messages.
+- Rating creation updates existing complaint rating if one already exists.
+- Public testimonials endpoint returns recent 4-5 score ratings with non-empty feedback.
+
+## Suggested Next Hardening Tasks
+
+1. Enforce endpoint-level authorization in backend security config.
+2. Add DB migrations (Flyway/Liquibase) for controlled schema evolution.
+3. Add pagination/filtering support to high-volume list endpoints.
+4. Add integration tests for account deletion and transfer workflows.
