@@ -290,9 +290,7 @@ On startup, initializer logic seeds when missing:
 
 - Default categories (including `Other`)
 - Default specializations
-- Default admin user:
-    - Email: `admin@example.com`
-    - Password: `admin123`
+- Default admin user for local initialization (credentials intentionally not documented in repository files)
 
 ## Integration Notes
 
