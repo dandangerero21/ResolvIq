@@ -70,17 +70,17 @@ Usability - The interface shall be intuitive and accessible to non-technical use
 
 ### Use Case Diagram
 
-![Use Case Diagram](Use%20Case%20Diagram.jfif)
+![Use Case Diagram](https://raw.githubusercontent.com/dandangerero21/ResolvIq/refs/heads/main/docs/Use%20Case%20Diagram.jfif)
 
 ### Activity Diagram
 
-![Activity Diagram Flowchart](images/activity-diagram-flowchart.svg)
+![Activity Diagram Flowchart](https://raw.githubusercontent.com/dandangerero21/ResolvIq/refs/heads/main/docs/images/activity-diagram-flowchart.svg)
 
 ## 6. Database Design
 
 ### ER Diagram
 
-![ER Diagram](images/er-diagram.svg)
+![ER Diagram](https://raw.githubusercontent.com/dandangerero21/ResolvIq/refs/heads/main/docs/images/er-diagram.svg)
 
 ### Database Tables
 
@@ -98,7 +98,7 @@ Usability - The interface shall be intuitive and accessible to non-technical use
 
 ResolvIQ follows a layered client-server architecture.
 
-![System Architecture Flowchart](images/system-architecture-flowchart.svg)
+![System Architecture Flowchart](https://raw.githubusercontent.com/dandangerero21/ResolvIq/refs/heads/main/docs/images/system-architecture-flowchart.svg)
 
 Structure summary:
 
