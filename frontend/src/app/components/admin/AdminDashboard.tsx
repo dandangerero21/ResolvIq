@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -6,6 +6,7 @@ import { ComplaintCard } from '../shared/ComplaintCard';
 import { ComplaintSortSelect } from '../shared/ComplaintSortSelect';
 import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
+import realtimeService from '../../../services/realtimeService';
 import { Complaint } from '../../types';
 import { sortComplaints, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
@@ -32,21 +33,32 @@ export function AdminDashboard() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sortBy, setSortBy] = useState<ComplaintSortKey>('newest');
 
+  const refreshComplaints = useCallback(async () => {
+    try {
+      const data = await complaintService.getAllComplaints();
+      setComplaints(data);
+    } catch (error) {
+      console.error('Failed to load complaints:', error);
+      // Fall back to context complaints if backend fails
+      setComplaints(contextComplaints);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contextComplaints]);
+
   useEffect(() => {
-    const loadComplaints = async () => {
-      try {
-        const data = await complaintService.getAllComplaints();
-        setComplaints(data);
-      } catch (error) {
-        console.error('Failed to load complaints:', error);
-        // Fall back to context complaints if backend fails
-        setComplaints(contextComplaints);
-      } finally {
-        setIsLoading(false);
-      }
+    void refreshComplaints();
+  }, [refreshComplaints]);
+
+  useEffect(() => {
+    const unsubscribe = realtimeService.subscribeToComplaintUpdates(() => {
+      void refreshComplaints();
+    });
+
+    return () => {
+      unsubscribe();
     };
-    loadComplaints();
-  }, []);
+  }, [refreshComplaints]);
 
   const displayComplaints = complaints.length > 0 ? complaints : contextComplaints;
   const isResolvedStatus = (complaint: Complaint) => complaint.status === 'resolved' || complaint.status === 'Resolved';

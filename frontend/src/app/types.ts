@@ -32,6 +32,14 @@ export interface Message {
   senderName: string;
   senderRole?: UserRole;
   content: string;
+  imageUrl?: string;
+  imageOriginalName?: string;
+  imageMimeType?: string;
+  replyToMessageId?: number;
+  replyToContent?: string;
+  replyToSenderName?: string;
+  replyToImageUrl?: string;
+  replyToImageOriginalName?: string;
   timestamp: Date;
   isSolved?: boolean;
   isSolutionProposal?: boolean;

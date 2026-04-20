@@ -10,6 +10,7 @@ import messageService from '../../../services/messageService';
 import assignmentService from '../../../services/assignmentService';
 import userService, { User as StaffMember } from '../../../services/userService';
 import { markConversationAsRead } from '../../../services/conversationUnreadService';
+import realtimeService from '../../../services/realtimeService';
 import { hasAcceptedSolution } from '../../utils/solutionWorkflow';
 import { ArrowLeft, ArrowRightLeft, Calendar, ChevronDown, Lightbulb, Star, Tag, User } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
@@ -45,7 +46,6 @@ export function StaffComplaintView() {
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [pollInterval, setPollInterval] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isConversationEnded, setIsConversationEnded] = useState(false);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [selectedTransferStaffId, setSelectedTransferStaffId] = useState('');
@@ -80,14 +80,19 @@ export function StaffComplaintView() {
     loadComplaint();
   }, [id]);
 
-  // Fetch messages from backend and set up polling
+  // Fetch thread data and subscribe to realtime complaint events
   useEffect(() => {
     if (!complaint?.complaintId) return;
     const complaintId = complaint.complaintId;
+    let isMounted = true;
 
-    const fetchMessages = async () => {
+    const refreshThread = async () => {
       try {
         const backendMessages = await messageService.getComplaintMessages(complaintId);
+        if (!isMounted) {
+          return;
+        }
+
         setMessages(backendMessages);
 
         const viewerUserId = Number(currentUser?.userId ?? currentUser?.id)
@@ -99,51 +104,29 @@ export function StaffComplaintView() {
             messages: backendMessages,
           })
         }
-      } catch (error) {
-        console.error('Failed to load messages:', error);
-      }
-    };
 
-    // Fetch immediately
-    fetchMessages();
-
-    // Set up polling every 2 seconds
-    const interval = setInterval(fetchMessages, 2000);
-    setPollInterval(interval);
-
-    return () => clearInterval(interval);
-  }, [complaint?.complaintId, currentUser?.userId, currentUser?.id]);
-
-  // Poll for complaint status changes
-  useEffect(() => {
-    if (!complaint?.complaintId) return;
-
-    const pollComplaintStatus = async () => {
-      try {
-        const updatedComplaint = await complaintService.getComplaintById(complaint.complaintId!);
-        if (updatedComplaint) {
-          setComplaint(updatedComplaint);
-          // Check if status has changed to a closed state
-          if (isClosedConversationStatus(updatedComplaint.status)) {
-            setIsConversationEnded(true);
-            // Clear the polling interval if conversation is ended
-            if (pollInterval) {
-              clearInterval(pollInterval);
-              setPollInterval(null);
-            }
-          }
+        const updatedComplaint = await complaintService.getComplaintById(complaintId);
+        if (!isMounted) {
+          return;
         }
+
+        setComplaint(updatedComplaint);
+        setIsConversationEnded(isClosedConversationStatus(updatedComplaint.status));
       } catch (error) {
-        // Log but don't crash - complaint might not exist in backend yet
-        console.debug('Failed to poll complaint status:', error);
+        console.error('Failed to refresh complaint thread:', error);
       }
     };
 
-    // Poll every 3 seconds
-    const statusPollInterval = setInterval(pollComplaintStatus, 3000);
+    void refreshThread();
+    const unsubscribe = realtimeService.subscribeToComplaint(complaintId, () => {
+      void refreshThread();
+    });
 
-    return () => clearInterval(statusPollInterval);
-  }, [complaint?.complaintId, pollInterval]);
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [complaint?.complaintId, currentUser?.userId, currentUser?.id]);
 
   useEffect(() => {
     if (currentUser?.role !== 'staff') {
@@ -178,7 +161,12 @@ export function StaffComplaintView() {
     });
   }, [staffMembers, currentStaffId]);
 
-  const handleSendMessage = async (content: string, isSolutionProposal?: boolean) => {
+  const handleSendMessage = async (
+    content: string,
+    isSolutionProposal?: boolean,
+    imageFile?: File | null,
+    replyToMessageId?: number | null
+  ) => {
     if (!currentUser || !complaint?.complaintId) return;
     if (isSolutionProposal && solutionAccepted) {
       alert('A solution has already been accepted. Please mark this complaint as solved.');
@@ -191,7 +179,9 @@ export function StaffComplaintView() {
         complaint.complaintId,
         Number(currentUser.userId) || Number(currentUser.id),
         content,
-        isSolutionProposal
+        isSolutionProposal,
+        imageFile,
+        replyToMessageId
       );
       // Add to local state
       setMessages(prev => [...prev, newMessage]);

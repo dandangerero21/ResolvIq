@@ -7,6 +7,7 @@ import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
 import messageService from '../../../services/messageService';
 import { getConversationUnreadCount } from '../../../services/conversationUnreadService';
+import realtimeService from '../../../services/realtimeService';
 import { Complaint } from '../../types';
 import { sortComplaints, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
@@ -20,7 +21,7 @@ import {
   History,
   Loader,
 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { cn } from '../ui/utils';
 
 type TabKey = 'active' | 'resolved' | 'cancelled';
@@ -35,20 +36,31 @@ export function StaffDashboard() {
   const [sortBy, setSortBy] = useState<ComplaintSortKey>('newest');
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
 
+  const refreshComplaints = useCallback(async () => {
+    try {
+      const data = await complaintService.getAllComplaints();
+      setComplaints(data);
+    } catch (error) {
+      console.error('Failed to load complaints:', error);
+      setComplaints(contextComplaints);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contextComplaints]);
+
   useEffect(() => {
-    const loadComplaints = async () => {
-      try {
-        const data = await complaintService.getAllComplaints();
-        setComplaints(data);
-      } catch (error) {
-        console.error('Failed to load complaints:', error);
-        setComplaints(contextComplaints);
-      } finally {
-        setIsLoading(false);
-      }
+    void refreshComplaints();
+  }, [refreshComplaints]);
+
+  useEffect(() => {
+    const unsubscribe = realtimeService.subscribeToComplaintUpdates(() => {
+      void refreshComplaints();
+    });
+
+    return () => {
+      unsubscribe();
     };
-    loadComplaints();
-  }, []);
+  }, [refreshComplaints]);
 
   const displayComplaints = complaints.length > 0 ? complaints : contextComplaints;
 
@@ -81,6 +93,29 @@ export function StaffDashboard() {
 
     let isMounted = true
 
+    const refreshUnreadCount = async (complaintId: number) => {
+      try {
+        const messages = await messageService.getComplaintMessages(complaintId)
+        const unreadCount = getConversationUnreadCount({
+          complaintId,
+          viewerRole: 'staff',
+          viewerUserId,
+          messages,
+        })
+
+        if (!isMounted) {
+          return
+        }
+
+        setUnreadCounts(prev => ({
+          ...prev,
+          [complaintId]: unreadCount,
+        }))
+      } catch (error) {
+        console.error(`Failed to load unread count for complaint ${complaintId}:`, error)
+      }
+    }
+
     const refreshUnreadCounts = async () => {
       const unreadEntries = await Promise.all(
         complaintIds.map(async complaintId => {
@@ -108,13 +143,15 @@ export function StaffDashboard() {
     }
 
     void refreshUnreadCounts()
-    const interval = setInterval(() => {
-      void refreshUnreadCounts()
-    }, 4000)
+    const unsubscribeCallbacks = complaintIds.map(complaintId =>
+      realtimeService.subscribeToComplaint(complaintId, () => {
+        void refreshUnreadCount(complaintId)
+      })
+    )
 
     return () => {
       isMounted = false
-      clearInterval(interval)
+      unsubscribeCallbacks.forEach(unsubscribe => unsubscribe())
     }
   }, [currentUser?.userId, currentUser?.id, displayComplaints])
 

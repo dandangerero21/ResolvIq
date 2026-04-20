@@ -1,14 +1,22 @@
 import { useState, useLayoutEffect, useRef, useCallback, useEffect } from 'react';
 import { Message, Complaint } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { Send, CheckCircle2, Lock, Lightbulb, AlertCircle } from 'lucide-react';
+import { Send, CheckCircle2, Lock, Lightbulb, AlertCircle, Paperclip, Reply, X } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { isAcceptedSystemMessage } from '../../utils/solutionWorkflow';
+
+const CHAT_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_CHAT_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
 
 interface ConversationThreadProps {
   complaint: Complaint;
   messages: Message[];
-  onSendMessage: (content: string, isSolutionProposal?: boolean) => void;
+  onSendMessage: (
+    content: string,
+    isSolutionProposal?: boolean,
+    imageFile?: File | null,
+    replyToMessageId?: number | null
+  ) => void | Promise<void>;
   onEndConversation?: () => void;
   onMarkAsSolved?: () => void;
   onSolutionAccepted?: () => void;
@@ -37,9 +45,14 @@ export function ConversationThread({
   const { currentUser } = useAuth();
   const [newMessage, setNewMessage] = useState('');
   const [markAsSolution, setMarkAsSolution] = useState(false);
+  const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedImagePreviewUrl, setSelectedImagePreviewUrl] = useState<string | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [showSolutionAcceptanceConfirmation, setShowSolutionAcceptanceConfirmation] = useState(false);
   const [showEndConfirmation, setShowEndConfirmation] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isUserNearBottomRef = useRef(true);
   const pendingScrollFromOwnSendRef = useRef(false);
   const didInitialScrollRef = useRef(false);
@@ -109,13 +122,97 @@ export function ConversationThread({
     }
   }, [solutionAccepted, markAsSolution]);
 
+  useEffect(() => {
+    setReplyingToMessage(null);
+  }, [complaintKey]);
+
+  useEffect(() => {
+    return () => {
+      if (selectedImagePreviewUrl) {
+        URL.revokeObjectURL(selectedImagePreviewUrl);
+      }
+    };
+  }, [selectedImagePreviewUrl]);
+
+  const clearSelectedImage = useCallback(() => {
+    if (selectedImagePreviewUrl) {
+      URL.revokeObjectURL(selectedImagePreviewUrl);
+    }
+
+    setSelectedImage(null);
+    setSelectedImagePreviewUrl(null);
+    setAttachmentError(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [selectedImagePreviewUrl]);
+
+  const clearReplyTarget = useCallback(() => {
+    setReplyingToMessage(null);
+  }, []);
+
+  const getReplyPreviewText = useCallback((message: Message): string => {
+    const content = typeof message.content === 'string' ? message.content.trim() : '';
+    if (content.length > 0) {
+      return content;
+    }
+
+    if (typeof message.imageOriginalName === 'string' && message.imageOriginalName.trim().length > 0) {
+      return `Image: ${message.imageOriginalName}`;
+    }
+
+    if (typeof message.imageUrl === 'string' && message.imageUrl.trim().length > 0) {
+      return 'Image attachment';
+    }
+
+    return 'Original message';
+  }, []);
+
+  const handleImageSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const contentType = file.type.toLowerCase();
+    if (!ALLOWED_CHAT_IMAGE_TYPES.has(contentType)) {
+      setAttachmentError('Only JPG, PNG, WEBP, and GIF images are allowed.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > CHAT_IMAGE_MAX_SIZE_BYTES) {
+      setAttachmentError('Image is too large. Maximum allowed size is 5 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    if (selectedImagePreviewUrl) {
+      URL.revokeObjectURL(selectedImagePreviewUrl);
+    }
+
+    setSelectedImage(file);
+    setSelectedImagePreviewUrl(URL.createObjectURL(file));
+    setAttachmentError(null);
+  };
+
   const handleSend = () => {
-    if (!newMessage.trim()) return;
+    const trimmedMessage = newMessage.trim();
+    if (!trimmedMessage && !selectedImage) return;
+
     pendingScrollFromOwnSendRef.current = true;
     const canSendAsProposal = isStaff && !solutionAccepted && markAsSolution;
-    onSendMessage(newMessage.trim(), canSendAsProposal);
+    const replyToMessageId =
+      replyingToMessage && typeof replyingToMessage.messageId === 'number'
+        ? replyingToMessage.messageId
+        : null;
+
+    onSendMessage(trimmedMessage, canSendAsProposal, selectedImage, replyToMessageId);
     setNewMessage('');
     setMarkAsSolution(false);
+    clearReplyTarget();
+    clearSelectedImage();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -150,6 +247,8 @@ export function ConversationThread({
       grouped.push({ date: dateStr, messages: [msg] });
     }
   });
+
+  const canSendMessage = newMessage.trim().length > 0 || selectedImage !== null;
 
   return (
     <div className="flex min-h-0 h-full flex-col bg-black">
@@ -280,6 +379,26 @@ export function ConversationThread({
                     : 'Deleted account';
                 const senderName = isStaffMessage ? `${baseSenderName} - Staff` : baseSenderName;
                 const senderInitial = baseSenderName.charAt(0).toUpperCase();
+                const hasImageAttachment =
+                  typeof message.imageUrl === 'string' && message.imageUrl.trim().length > 0;
+                const hasTextContent =
+                  typeof message.content === 'string' && message.content.trim().length > 0;
+                const hasReplyReference = typeof message.replyToMessageId === 'number';
+                const hasReplyImage =
+                  typeof message.replyToImageUrl === 'string' && message.replyToImageUrl.trim().length > 0;
+                const replySenderName =
+                  typeof message.replyToSenderName === 'string' && message.replyToSenderName.trim().length > 0
+                    ? message.replyToSenderName.trim()
+                    : 'Replied message';
+                const replyContent =
+                  typeof message.replyToContent === 'string' && message.replyToContent.trim().length > 0
+                    ? message.replyToContent.trim()
+                    : typeof message.replyToImageOriginalName === 'string' &&
+                        message.replyToImageOriginalName.trim().length > 0
+                      ? `Image: ${message.replyToImageOriginalName}`
+                      : hasReplyImage
+                        ? 'Image attachment'
+                        : 'Original message';
                 return (
                   <div
                     key={message.id}
@@ -319,10 +438,71 @@ export function ConversationThread({
                             message.isSolutionProposal && !isOwn && 'border-green-500/30 bg-green-500/10 text-green-300'
                           )}
                         >
-                          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                            {message.content}
-                          </p>
+                          {hasReplyReference && (
+                            <div
+                              className={cn(
+                                'mb-2 rounded-lg border px-2.5 py-2 text-xs',
+                                isOwn ? 'border-white/20 bg-white/10' : 'border-white/15 bg-black/20'
+                              )}
+                            >
+                              <p className="text-white/65">{replySenderName}</p>
+                              {hasReplyImage && (
+                                <img
+                                  src={message.replyToImageUrl}
+                                  alt={message.replyToImageOriginalName || 'Replied image'}
+                                  loading="lazy"
+                                  className="mt-1 h-10 w-10 rounded object-cover"
+                                />
+                              )}
+                              <p className="mt-1 line-clamp-2 break-words [overflow-wrap:anywhere] text-white/80">
+                                {replyContent}
+                              </p>
+                            </div>
+                          )}
+                          {hasImageAttachment && (
+                            <a
+                              href={message.imageUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block"
+                            >
+                              <img
+                                src={message.imageUrl}
+                                alt={message.imageOriginalName || 'Uploaded chat image'}
+                                loading="lazy"
+                                className="max-h-72 w-auto max-w-full rounded-lg object-cover"
+                              />
+                            </a>
+                          )}
+                          {hasTextContent && (
+                            <p className={cn(
+                              'whitespace-pre-wrap break-words [overflow-wrap:anywhere]',
+                              hasImageAttachment && 'mt-2'
+                            )}>
+                              {message.content}
+                            </p>
+                          )}
+                          {hasImageAttachment && message.imageOriginalName && (
+                            <p className="mt-1 text-[11px] text-white/60 break-all">
+                              {message.imageOriginalName}
+                            </p>
+                          )}
                         </div>
+
+                        {!isClosed && (
+                          <button
+                            type="button"
+                            onClick={() => setReplyingToMessage(message)}
+                            className={cn(
+                              'mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-white/55 transition-colors hover:bg-white/10 hover:text-white/80',
+                              isOwn ? 'self-end' : 'self-start'
+                            )}
+                            aria-label="Reply to message"
+                          >
+                            <Reply className="h-3 w-3" />
+                            <span>Reply</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -466,13 +646,85 @@ export function ConversationThread({
             </div>
           )}
 
+          {replyingToMessage && (
+            <div className="mb-3 rounded-xl border border-white/20 bg-white/5 p-2.5">
+              <div className="flex items-start gap-2.5">
+                <Reply className="mt-0.5 h-4 w-4 flex-shrink-0 text-white/60" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-white/85" style={{ fontWeight: 500 }}>
+                    Replying to {replyingToMessage.senderName || 'message'}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-[11px] text-white/60 break-words [overflow-wrap:anywhere]">
+                    {getReplyPreviewText(replyingToMessage)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearReplyTarget}
+                  className="rounded-md border border-white/20 p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                  aria-label="Cancel reply"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {selectedImage && selectedImagePreviewUrl && (
+            <div className="mb-3 rounded-xl border border-white/20 bg-white/5 p-2.5">
+              <div className="flex items-start gap-3">
+                <img
+                  src={selectedImagePreviewUrl}
+                  alt={selectedImage.name}
+                  className="h-14 w-14 rounded-lg border border-white/15 object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs text-white/90" style={{ fontWeight: 500 }}>
+                    {selectedImage.name}
+                  </p>
+                  <p className="mt-1 text-[11px] text-white/55">
+                    {(selectedImage.size / (1024 * 1024)).toFixed(2)} MB
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearSelectedImage}
+                  className="rounded-md border border-white/20 p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                  aria-label="Remove selected image"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {attachmentError && (
+            <p className="mb-3 text-xs text-red-300">{attachmentError}</p>
+          )}
+
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-11 w-11 rounded-xl border border-white/20 bg-white/10 text-white/70 transition-colors hover:border-white/40 hover:text-white"
+              aria-label="Attach image"
+            >
+              <Paperclip className="mx-auto h-4 w-4" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={handleImageSelected}
+            />
+
             <div className="flex-1 relative">
               <textarea
                 value={newMessage}
                 onChange={e => setNewMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type your message… (Enter to send)"
+                placeholder="Type your message... (optional if sending an image)"
                 rows={1}
                 className="w-full resize-none px-4 py-3 bg-white/10 backdrop-blur border border-white/20 rounded-xl text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/40 transition-colors"
                 style={{ minHeight: '44px', maxHeight: '120px' }}
@@ -490,10 +742,10 @@ export function ConversationThread({
             </div>
             <button
               onClick={handleSend}
-              disabled={!newMessage.trim()}
+              disabled={!canSendMessage}
               className={cn(
                 'w-11 h-11 rounded-xl flex items-center justify-center transition-all flex-shrink-0',
-                newMessage.trim()
+                canSendMessage
                   ? markAsSolution
                     ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm'
                     : 'bg-black hover:bg-red-600 text-white shadow-sm'

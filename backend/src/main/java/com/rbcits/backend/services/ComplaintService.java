@@ -18,13 +18,16 @@ public class ComplaintService {
     private final ComplaintRepository complaintRepository;
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
+    private final RealtimeEventService realtimeEventService;
 
     public ComplaintService(ComplaintRepository complaintRepository, 
                            UserRepository userRepository,
-                           CategoryRepository categoryRepository) {
+                           CategoryRepository categoryRepository,
+                           RealtimeEventService realtimeEventService) {
         this.complaintRepository = complaintRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
+        this.realtimeEventService = realtimeEventService;
     }
 
     public ComplaintDTO createComplaint(ComplaintDTO dto, Long userId) {
@@ -59,6 +62,7 @@ public class ComplaintService {
         complaint.setCustomCategory(custom);
 
         Complaint saved = complaintRepository.save(complaint);
+        realtimeEventService.publishComplaintEvent("COMPLAINT_CREATED", saved.getComplaintId(), true);
         return convertToDTO(saved);
     }
 
@@ -102,6 +106,7 @@ public class ComplaintService {
             complaint.setResolvedAt(Instant.now());
         }
         Complaint updated = complaintRepository.save(complaint);
+        realtimeEventService.publishComplaintEvent("COMPLAINT_UPDATED", updated.getComplaintId(), true);
         return convertToDTO(updated);
     }
 
@@ -110,6 +115,7 @@ public class ComplaintService {
             throw new IllegalArgumentException("Complaint not found");
         }
         complaintRepository.deleteById(id);
+        realtimeEventService.publishComplaintEvent("COMPLAINT_DELETED", id, true);
     }
 
     private ComplaintDTO convertToDTO(Complaint complaint) {

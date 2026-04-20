@@ -3,7 +3,12 @@ package com.rbcits.backend.controllers;
 import com.rbcits.backend.DTOs.MessageDTO;
 import com.rbcits.backend.services.MessageService;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
 @RestController
@@ -20,7 +25,47 @@ public class MessageController {
     public MessageDTO createMessage(@RequestParam Long complaintId,
                                    @RequestParam Long userId,
                                    @RequestBody MessageRequest request) {
-        return messageService.createMessage(complaintId, userId, request.getContent(), request.getIsSolutionProposal());
+        return messageService.createMessage(
+            complaintId,
+            userId,
+            request.getContent(),
+            request.getIsSolutionProposal(),
+            request.getReplyToMessageId()
+        );
+    }
+
+    @PostMapping(value = "/with-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public MessageDTO createMessageWithImage(@RequestParam Long complaintId,
+                                             @RequestParam Long userId,
+                                             @RequestParam(required = false) String content,
+                                             @RequestParam(name = "isSolutionProposal", defaultValue = "false") boolean isSolutionProposal,
+                                             @RequestParam(required = false) Long replyToMessageId,
+                                             @RequestPart("image") MultipartFile image) {
+        return messageService.createMessageWithImage(
+                complaintId,
+                userId,
+                content,
+                isSolutionProposal,
+                image,
+                replyToMessageId
+        );
+    }
+
+    @GetMapping("/images/{fileName:.+}")
+    public ResponseEntity<Resource> getMessageImage(@PathVariable String fileName) {
+        Resource resource = messageService.loadMessageImage(fileName);
+        String contentType = messageService.resolveMessageImageContentType(fileName);
+
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(contentType);
+        } catch (IllegalArgumentException ex) {
+            mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .body(resource);
     }
 
     @GetMapping("/complaint/{complaintId}")
@@ -54,6 +99,9 @@ public class MessageController {
         @JsonProperty("isSolutionProposal")
         private boolean isSolutionProposal;
 
+        @JsonProperty("replyToMessageId")
+        private Long replyToMessageId;
+
         // No-arg constructor for Jackson
         public MessageRequest() {
         }
@@ -77,6 +125,14 @@ public class MessageController {
 
         public void setIsSolutionProposal(boolean isSolutionProposal) {
             this.isSolutionProposal = isSolutionProposal;
+        }
+
+        public Long getReplyToMessageId() {
+            return replyToMessageId;
+        }
+
+        public void setReplyToMessageId(Long replyToMessageId) {
+            this.replyToMessageId = replyToMessageId;
         }
     }
 }

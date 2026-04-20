@@ -32,6 +32,15 @@ public class Message {
     
     @Column(name = "is_system_message", nullable = false)
     private boolean isSystemMessage = false;
+
+    @Column(name = "image_file_name", length = 160)
+    private String imageFileName;
+
+    @Column(name = "image_original_name", length = 255)
+    private String imageOriginalName;
+
+    @Column(name = "image_mime_type", length = 120)
+    private String imageMimeType;
     
     private LocalDateTime timestamp;
 
@@ -43,4 +52,8 @@ public class Message {
     @ManyToOne
     @JoinColumn(name = "user_id")
     private User sender;
+
+    @ManyToOne
+    @JoinColumn(name = "reply_to_message_id")
+    private Message replyTo;
 }

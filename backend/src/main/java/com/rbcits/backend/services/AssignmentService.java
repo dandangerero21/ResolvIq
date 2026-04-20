@@ -27,15 +27,18 @@ public class AssignmentService {
     private final ComplaintRepository complaintRepository;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
+    private final RealtimeEventService realtimeEventService;
 
     public AssignmentService(AssignmentRepository assignmentRepository,
                             ComplaintRepository complaintRepository,
                             UserRepository userRepository,
-                            MessageRepository messageRepository) {
+                            MessageRepository messageRepository,
+                            RealtimeEventService realtimeEventService) {
         this.assignmentRepository = assignmentRepository;
         this.complaintRepository = complaintRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
+        this.realtimeEventService = realtimeEventService;
     }
 
     @Transactional
@@ -71,10 +74,13 @@ public class AssignmentService {
     public void deleteAssignment(Long id) {
         Assignment assignment = assignmentRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assignment not found"));
+
+        Long complaintId = assignment.getComplaint() != null ? assignment.getComplaint().getComplaintId() : null;
         
         assignment.getComplaint().setStatus("open");
         complaintRepository.save(assignment.getComplaint());
         assignmentRepository.deleteById(id);
+        realtimeEventService.publishComplaintEvent("ASSIGNMENT_REMOVED", complaintId, true);
     }
 
     private AssignmentDTO upsertAssignment(Long complaintId,
@@ -147,6 +153,8 @@ public class AssignmentService {
         if (isReassignment) {
             createReassignmentSystemMessage(complaint, previousStaffName, targetStaff.getName(), transferRequestedByStaff);
         }
+
+        realtimeEventService.publishComplaintEvent("ASSIGNMENT_UPDATED", complaint.getComplaintId(), true);
 
         return convertToDTO(saved);
     }

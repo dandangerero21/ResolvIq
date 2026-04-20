@@ -14,6 +14,14 @@ import java.time.LocalDateTime;
 public class MessageDTO {
     private Long messageId;
     private String content;
+    private String imageUrl;
+    private String imageOriginalName;
+    private String imageMimeType;
+    private Long replyToMessageId;
+    private String replyToContent;
+    private String replyToSenderName;
+    private String replyToImageUrl;
+    private String replyToImageOriginalName;
     private boolean isSolved;
     
     @JsonProperty("isSolutionProposal")

@@ -6,6 +6,7 @@ import { ConversationThread } from '../shared/ConversationThread';
 import complaintService from '../../../services/complaintService';
 import messageService from '../../../services/messageService';
 import { markConversationAsRead } from '../../../services/conversationUnreadService';
+import realtimeService from '../../../services/realtimeService';
 import ratingService from '../../../services/ratingService';
 import { Complaint, Message } from '../../types';
 import { complaintCategoryLabel } from '../../utils/complaintCategoryLabel';
@@ -111,15 +112,20 @@ export function UserComplaintView() {
     loadComplaint();
   }, [id]);
 
-  // Fetch messages from backend and set up polling
+  // Fetch thread data and subscribe to realtime complaint events
   useEffect(() => {
     if (!complaint?.complaintId) return;
     const complaintId = complaint.complaintId;
+    let isMounted = true;
 
     const fetchData = async () => {
       try {
         // Fetch messages and complaint status
         const backendMessages = await messageService.getComplaintMessages(complaintId);
+        if (!isMounted) {
+          return;
+        }
+
         setMessages(backendMessages);
 
         const viewerUserId = Number(currentUser?.userId ?? currentUser?.id)
@@ -137,6 +143,10 @@ export function UserComplaintView() {
         if (!showRating) {
           try {
             const updatedComplaint = await complaintService.getComplaintById(complaintId);
+            if (!isMounted) {
+              return;
+            }
+
             setComplaint(updatedComplaint);
           
             // Closed on the server — attribute to user only if they used "End conversation" (see sessionStorage).
@@ -159,13 +169,15 @@ export function UserComplaintView() {
       }
     };
 
-    // Fetch immediately
-    fetchData();
+    void fetchData();
+    const unsubscribe = realtimeService.subscribeToComplaint(complaintId, () => {
+      void fetchData();
+    });
 
-    // Set up polling every 2 seconds
-    const interval = setInterval(fetchData, 2000);
-
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [complaint?.complaintId, isConversationEnded, showRating, currentUser?.userId, currentUser?.id]);
 
   // This effect is no longer needed - we don't use the solution dialog anymore
@@ -278,7 +290,12 @@ export function UserComplaintView() {
     }
   };
 
-  const handleSendMessage = async (content: string, isSolutionProposal?: boolean) => {
+  const handleSendMessage = async (
+    content: string,
+    isSolutionProposal?: boolean,
+    imageFile?: File | null,
+    replyToMessageId?: number | null
+  ) => {
     if (!currentUser || !complaint?.complaintId) return;
     try {
       // Send message to backend first
@@ -286,7 +303,9 @@ export function UserComplaintView() {
         complaint.complaintId,
         Number(currentUser.userId) || Number(currentUser.id),
         content,
-        isSolutionProposal
+        isSolutionProposal,
+        imageFile,
+        replyToMessageId
       );
       // Add to local state
       setMessages(prev => [...prev, newMessage]);
@@ -297,9 +316,17 @@ export function UserComplaintView() {
         senderId: Number(currentUser.id),
         senderName: currentUser.name,
         senderRole: currentUser.role,
-        content,
-        timestamp: new Date(),
-        isSolutionProposal,
+        content: newMessage.content,
+        imageUrl: newMessage.imageUrl,
+        imageOriginalName: newMessage.imageOriginalName,
+        imageMimeType: newMessage.imageMimeType,
+        replyToMessageId: newMessage.replyToMessageId,
+        replyToContent: newMessage.replyToContent,
+        replyToSenderName: newMessage.replyToSenderName,
+        replyToImageUrl: newMessage.replyToImageUrl,
+        replyToImageOriginalName: newMessage.replyToImageOriginalName,
+        timestamp: new Date(newMessage.timestamp),
+        isSolutionProposal: newMessage.isSolutionProposal,
       });
     } catch (error) {
       console.error('Failed to send message:', error);

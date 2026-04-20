@@ -7,6 +7,7 @@ import BorderGlow from '../../../components/BorderGlow';
 import complaintService from '../../../services/complaintService';
 import messageService from '../../../services/messageService';
 import { getConversationUnreadCount } from '../../../services/conversationUnreadService';
+import realtimeService from '../../../services/realtimeService';
 import { Complaint } from '../../types';
 import { sortComplaints, type ComplaintSortKey } from '../../utils/complaintSort';
 import {
@@ -15,7 +16,7 @@ import {
   Clock,
   Sparkles,
 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { cn } from '../ui/utils';
 
 type TabKey = 'all' | 'open' | 'inprogress' | 'resolved' | 'cancelled';
@@ -41,21 +42,37 @@ export function UserDashboard() {
     [currentUser?.userId, currentUser?.id]
   );
 
+  const refreshComplaints = useCallback(async () => {
+    if (!Number.isFinite(viewerUserId)) {
+      return;
+    }
+
+    try {
+      const backendComplaints = await complaintService.getUserComplaints(viewerUserId);
+      setComplaints(backendComplaints);
+    } catch (error) {
+      console.error('Failed to load complaints:', error);
+      setComplaints(contextComplaints);
+    }
+  }, [viewerUserId, contextComplaints]);
+
   useEffect(() => {
-    if (!Number.isFinite(viewerUserId)) return;
+    void refreshComplaints();
+  }, [refreshComplaints]);
 
-    const loadComplaints = async () => {
-      try {
-        const backendComplaints = await complaintService.getUserComplaints(viewerUserId);
-        setComplaints(backendComplaints);
-      } catch (error) {
-        console.error('Failed to load complaints:', error);
-        setComplaints(contextComplaints);
-      }
+  useEffect(() => {
+    if (!Number.isFinite(viewerUserId)) {
+      return;
+    }
+
+    const unsubscribe = realtimeService.subscribeToComplaintUpdates(() => {
+      void refreshComplaints();
+    });
+
+    return () => {
+      unsubscribe();
     };
-
-    loadComplaints();
-  }, [viewerUserId]);
+  }, [viewerUserId, refreshComplaints]);
 
   const userComplaints = useMemo(
     () =>
@@ -114,6 +131,29 @@ export function UserDashboard() {
 
     let isMounted = true
 
+    const refreshUnreadCount = async (complaintId: number) => {
+      try {
+        const messages = await messageService.getComplaintMessages(complaintId)
+        const unreadCount = getConversationUnreadCount({
+          complaintId,
+          viewerRole: 'user',
+          viewerUserId,
+          messages,
+        })
+
+        if (!isMounted) {
+          return
+        }
+
+        setUnreadCounts(prev => ({
+          ...prev,
+          [complaintId]: unreadCount,
+        }))
+      } catch (error) {
+        console.error(`Failed to load unread count for complaint ${complaintId}:`, error)
+      }
+    }
+
     const refreshUnreadCounts = async () => {
       const unreadEntries = await Promise.all(
         complaintIds.map(async complaintId => {
@@ -141,13 +181,15 @@ export function UserDashboard() {
     }
 
     void refreshUnreadCounts()
-    const interval = setInterval(() => {
-      void refreshUnreadCounts()
-    }, 4000)
+    const unsubscribeCallbacks = complaintIds.map(complaintId =>
+      realtimeService.subscribeToComplaint(complaintId, () => {
+        void refreshUnreadCount(complaintId)
+      })
+    )
 
     return () => {
       isMounted = false
-      clearInterval(interval)
+      unsubscribeCallbacks.forEach(unsubscribe => unsubscribe())
     }
   }, [viewerUserId, complaintIds])
 
