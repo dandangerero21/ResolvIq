@@ -6,7 +6,10 @@ import com.rbcits.backend.models.Category;
 import com.rbcits.backend.repositories.UserRepository;
 import com.rbcits.backend.repositories.SpecializationRepository;
 import com.rbcits.backend.repositories.CategoryRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +19,8 @@ import java.util.Base64;
 @Component
 public class DataInitializer implements CommandLineRunner {
 
+    private static final Logger logger = LoggerFactory.getLogger(DataInitializer.class);
+
     private static final String DEFAULT_ADMIN_EMAIL_B64 = "YWRtaW5AZXhhbXBsZS5jb20=";
     private static final String DEFAULT_ADMIN_PASSWORD_B64 = "YWRtaW4xMjM=";
 
@@ -23,17 +28,22 @@ public class DataInitializer implements CommandLineRunner {
     private final SpecializationRepository specializationRepository;
     private final CategoryRepository categoryRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
 
     public DataInitializer(UserRepository userRepository, SpecializationRepository specializationRepository, 
-                          CategoryRepository categoryRepository, PasswordEncoder passwordEncoder) {
+                          CategoryRepository categoryRepository, PasswordEncoder passwordEncoder,
+                          JdbcTemplate jdbcTemplate) {
         this.userRepository = userRepository;
         this.specializationRepository = specializationRepository;
         this.categoryRepository = categoryRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     public void run(String... args) throws Exception {
+        ensureTransferredCountColumn();
+
         // Create default categories if not exists
         if (categoryRepository.count() == 0) {
             categoryRepository.save(new Category(null, "Technical Issue", null));
@@ -89,5 +99,10 @@ public class DataInitializer implements CommandLineRunner {
             return envValue.trim();
         }
         return new String(Base64.getDecoder().decode(fallbackBase64), StandardCharsets.UTF_8);
+    }
+
+    private void ensureTransferredCountColumn() {
+        jdbcTemplate.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS transferred_count INTEGER NOT NULL DEFAULT 0");
+        logger.info("Ensured users.transferred_count column exists");
     }
 }
