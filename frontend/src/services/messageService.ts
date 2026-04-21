@@ -1,6 +1,9 @@
 import api from './api'
 import { Message } from '../app/types'
 
+const ISO_TIMESTAMP_WITH_TZ = /(Z|[+\-]\d{2}:?\d{2})$/i
+const PH_TIMEZONE_OFFSET_SUFFIX = '+08:00'
+
 const resolveImageUrl = (url: unknown): string | undefined => {
   if (typeof url !== 'string' || url.trim().length === 0) {
     return undefined
@@ -20,6 +23,35 @@ const resolveImageUrl = (url: unknown): string | undefined => {
   return `${apiHost}${normalizedPath}`
 }
 
+const normalizeTimestamp = (timestamp: unknown): Date => {
+  if (timestamp instanceof Date && !Number.isNaN(timestamp.getTime())) {
+    return timestamp
+  }
+
+  if (typeof timestamp === 'string') {
+    const trimmed = timestamp.trim()
+    if (trimmed.length > 0) {
+      // Backend LocalDateTime values are timezone-less. Interpret them as Philippine local time.
+      const candidate = ISO_TIMESTAMP_WITH_TZ.test(trimmed)
+        ? trimmed
+        : `${trimmed}${PH_TIMEZONE_OFFSET_SUFFIX}`
+      const parsed = new Date(candidate)
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed
+      }
+    }
+  }
+
+  if (typeof timestamp === 'number') {
+    const parsed = new Date(timestamp)
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed
+    }
+  }
+
+  return new Date()
+}
+
 // Helper function to normalize message data from backend
 const normalizeMessage = (message: any): Message => {
   return {
@@ -37,6 +69,7 @@ const normalizeMessage = (message: any): Message => {
     replyToImageOriginalName:
       typeof message.replyToImageOriginalName === 'string' ? message.replyToImageOriginalName : undefined,
     senderRole: message.senderRole as any || 'user',
+    timestamp: normalizeTimestamp(message.timestamp),
     isSolutionProposal: message.isSolutionProposal || false,
     isSystemMessage: message.isSystemMessage || false,
   }

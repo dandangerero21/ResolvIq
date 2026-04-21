@@ -3,10 +3,33 @@ import { Message, Complaint } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { Send, CheckCircle2, Lock, Lightbulb, AlertCircle, Paperclip, Reply, X } from 'lucide-react';
 import { cn } from '../ui/utils';
-import { isAcceptedSystemMessage } from '../../utils/solutionWorkflow';
+import {
+  getLatestStaffSolutionProposal,
+  getMessageNumericId,
+  hasRejectedLatestStaffSolutionProposal,
+  isAcceptedSystemMessage,
+} from '../../utils/solutionWorkflow';
 
 const CHAT_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_CHAT_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
+const PHILIPPINE_TIME_ZONE = 'Asia/Manila';
+const philippinesTimeFormatter = new Intl.DateTimeFormat('en-PH', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: true,
+  timeZone: PHILIPPINE_TIME_ZONE,
+});
+const philippinesDateKeyFormatter = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: PHILIPPINE_TIME_ZONE,
+});
+const philippinesDateLabelFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  timeZone: PHILIPPINE_TIME_ZONE,
+});
 
 interface ConversationThreadProps {
   complaint: Complaint;
@@ -222,18 +245,22 @@ export function ConversationThread({
     }
   };
 
+  const getPhilippinesDateKey = (date: Date) => philippinesDateKeyFormatter.format(new Date(date));
+
   const formatTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return philippinesTimeFormatter.format(new Date(date));
   };
 
   const formatDate = (date: Date) => {
-    const d = new Date(date);
     const today = new Date();
-    if (d.toDateString() === today.toDateString()) return 'Today';
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
-    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    const dateKey = getPhilippinesDateKey(date);
+    if (dateKey === getPhilippinesDateKey(today)) return 'Today';
+    if (dateKey === getPhilippinesDateKey(yesterday)) return 'Yesterday';
+
+    return philippinesDateLabelFormatter.format(new Date(date));
   };
 
   // Group messages by date
@@ -247,6 +274,19 @@ export function ConversationThread({
       grouped.push({ date: dateStr, messages: [msg] });
     }
   });
+
+  const latestStaffProposal = getLatestStaffSolutionProposal(messages);
+  const latestStaffProposalId = latestStaffProposal ? getMessageNumericId(latestStaffProposal) : null;
+  const latestProposalAlreadyRejected = hasRejectedLatestStaffSolutionProposal(messages);
+  const latestProposalDismissedLocally =
+    dismissedSolutionId !== null && latestStaffProposalId !== null && dismissedSolutionId === latestStaffProposalId;
+  const shouldShowSolutionPrompt =
+    !isStaff &&
+    !solutionAccepted &&
+    !isClosed &&
+    latestStaffProposal !== null &&
+    !latestProposalAlreadyRejected &&
+    !latestProposalDismissedLocally;
 
   const canSendMessage = newMessage.trim().length > 0 || selectedImage !== null;
 
@@ -521,7 +561,7 @@ export function ConversationThread({
       </div>
 
       {/* Solution Proposal Banner (User Side) - Only show if solution not yet responded to */}
-      {!isStaff && !solutionAccepted && dismissedSolutionId === null && messages.some(m => m.isSolutionProposal && m.senderRole === 'staff') && !isClosed && (
+      {shouldShowSolutionPrompt && (
         <div className="border-t border-emerald-500/30 bg-emerald-950/35 px-6 py-4 backdrop-blur">
           <div className="flex items-start gap-3">
             <div className="flex-1">
