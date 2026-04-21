@@ -102,7 +102,10 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void ensureTransferredCountColumn() {
-        jdbcTemplate.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS transferred_count INTEGER NOT NULL DEFAULT 0");
+        jdbcTemplate.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS transferred_count INTEGER DEFAULT 0");
+        jdbcTemplate.update("UPDATE users SET transferred_count = 0 WHERE transferred_count IS NULL");
+        jdbcTemplate.execute("ALTER TABLE users ALTER COLUMN transferred_count SET DEFAULT 0");
+        jdbcTemplate.execute("ALTER TABLE users ALTER COLUMN transferred_count SET NOT NULL");
         logger.info("Ensured users.transferred_count column exists");
     }
 }
